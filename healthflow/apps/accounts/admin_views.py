@@ -198,9 +198,44 @@ class PatientListCreateView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin, IsNotForcedReset]
 
     def get(self, request: Request) -> Response:
-        # Phase 1: appointments table not yet created; return empty list.
-        # Phase 3 will replace this with an appointment-derived query.
-        return Response([])
+        from apps.clinical.models import Appointment, AppointmentStatus
+        from django.db.models import Count, Max
+
+        search = request.query_params.get("search", "").strip()
+
+        # Patients who have at least one appointment at this hospital
+        patient_ids = (
+            Appointment.objects
+            .filter(hospital=request.user.hospital)
+            .values_list("patient_id", flat=True)
+            .distinct()
+        )
+
+        patients = User.objects.filter(
+            id__in=patient_ids,
+            role=UserRole.PATIENT,
+        ).order_by("name")
+
+        if search:
+            patients = patients.filter(name__icontains=search)
+
+        # Annotate with appointment count + most-recent appointment date
+        # using a separate query to keep this simple and scoped
+        result = []
+        for patient in patients:
+            appt_qs = Appointment.objects.filter(
+                patient=patient, hospital=request.user.hospital
+            )
+            total = appt_qs.count()
+            latest = appt_qs.order_by("-slot__date").select_related("slot").first()
+            result.append({
+                **UserProfileSerializer(patient).data,
+                "appointment_count":    total,
+                "last_appointment_date": latest.slot.date.isoformat() if latest else None,
+                "last_appointment_status": latest.status if latest else None,
+            })
+
+        return Response(result)
 
     def post(self, request: Request) -> Response:
         serializer = CreatePatientSerializer(data=request.data)
@@ -253,3 +288,77 @@ def _get_hospital_doctor(request: Request, doctor_id: str) -> User:
         )
     except User.DoesNotExist:
         raise NotFound("Doctor not found.") from None
+
+
+# ─── Dashboard (Phase 9) ──────────────────────────────────────────────────────
+
+class DashboardStatsView(APIView):
+    """
+    GET /admin-api/dashboard
+
+    Hospital-scoped aggregate stats for the admin portal home screen.
+    All queries are scoped to request.user.hospital — never cross-hospital.
+    """
+    permission_classes = [IsAuthenticated, IsAdmin, IsNotForcedReset]
+
+    def get(self, request: Request) -> Response:
+        from datetime import date
+        from apps.clinical.models import Appointment, AppointmentStatus, MedicineCatalog, MedicineStatus
+        from apps.notifications.models import Notification
+        from apps.scheduling.models import DoctorProfile
+
+        hospital = request.user.hospital
+        today    = date.today()
+
+        # Doctors active at this hospital
+        doctor_count = DoctorProfile.objects.filter(
+            user__hospital=hospital, is_active=True
+        ).count()
+
+        # Today's confirmed + completed bookings
+        todays_bookings = Appointment.objects.filter(
+            hospital=hospital,
+            slot__date=today,
+            status__in=[AppointmentStatus.CONFIRMED, AppointmentStatus.COMPLETED],
+        ).count()
+
+        # Pending-review medicines in this hospital's catalog
+        pending_medicines = MedicineCatalog.objects.filter(
+            hospital=hospital,
+            status=MedicineStatus.PENDING_REVIEW,
+        ).count()
+
+        # Unread notifications for all patients at this hospital
+        # (proxy: notifications belonging to this hospital)
+        unread_notifications = Notification.objects.filter(
+            hospital=hospital,
+            is_read=False,
+        ).count()
+
+        # Today's recent appointments (last 10) for the activity list
+        recent = (
+            Appointment.objects
+            .filter(hospital=hospital, slot__date=today)
+            .select_related("patient", "doctor", "slot")
+            .order_by("-slot__slot_start")[:10]
+        )
+        recent_list = [
+            {
+                "appointment_id": str(a.id),
+                "patient_name":   a.patient.name,
+                "doctor_name":    a.doctor.name,
+                "slot_start":     a.slot.slot_start.strftime("%H:%M"),
+                "status":         a.status,
+                "token":          a.token,
+            }
+            for a in recent
+        ]
+
+        return Response({
+            "date":                today.isoformat(),
+            "doctor_count":        doctor_count,
+            "todays_bookings":     todays_bookings,
+            "pending_medicines":   pending_medicines,
+            "unread_notifications": unread_notifications,
+            "recent_appointments": recent_list,
+        })

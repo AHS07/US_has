@@ -3,6 +3,7 @@ from django.urls import path
 
 from apps.accounts.admin_views import (
     AdminListCreateView,
+    DashboardStatsView,
     DoctorDetailView,
     DoctorListCreateView,
     HospitalBootstrapView,
@@ -24,6 +25,9 @@ app_name = "admin_api"
 urlpatterns = [
     # Hospital bootstrap — public, only works when no hospital exists yet
     path("hospitals", HospitalBootstrapView.as_view(), name="hospital-bootstrap"),
+
+    # Dashboard stats (Phase 9)
+    path("dashboard", DashboardStatsView.as_view(), name="dashboard-stats"),
 
     # Admin management
     path("admins", AdminListCreateView.as_view(), name="admin-list-create"),

@@ -207,7 +207,22 @@ class DoctorLeaveListView(APIView):
             reason=d.get("reason", ""),
             created_by=request.user,
         )
-        # Phase 7 will cascade-cancel appointments here; for now just record leave.
+
+        # Phase 7: cascade-cancel any confirmed appointments on the leave date
+        try:
+            from apps.scheduling.tasks import cascade_absence_task
+            cascade_absence_task.delay(
+                str(profile.user_id),
+                d["date"].isoformat(),
+                None,                    # full day
+                "affected_by_leave",
+            )
+        except Exception as exc:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "DoctorLeaveListView: cascade enqueue failed: %s", exc
+            )
+
         return Response(DoctorLeaveSerializer(leave).data, status=status.HTTP_201_CREATED)
 
 
@@ -350,7 +365,7 @@ class AttendanceMarkView(APIView):
             return Response({"status": "present", "date": d["date"], "shift": d["shift"]})
 
         # absent → upsert
-        attendance, _ = DoctorAttendance.objects.update_or_create(
+        attendance, created = DoctorAttendance.objects.update_or_create(
             doctor=profile,
             date=d["date"],
             shift=d["shift"],
@@ -359,7 +374,23 @@ class AttendanceMarkView(APIView):
                 "marked_by": request.user,
             },
         )
-        # Phase 7 hook: cascade-cancel appointments in the affected window
+
+        # Phase 7: enqueue cascade only on a new absent marking (not on duplicate PUT)
+        if created or attendance.status == AttendanceStatus.ABSENT:
+            try:
+                from apps.scheduling.tasks import cascade_absence_task
+                cascade_absence_task.delay(
+                    str(profile.user_id),
+                    d["date"].isoformat(),
+                    d["shift"],
+                    "affected_by_absent",
+                )
+            except Exception as exc:
+                import logging as _log
+                _log.getLogger(__name__).warning(
+                    "AttendanceMarkView: cascade enqueue failed: %s", exc
+                )
+
         return Response(
             {
                 "status":    attendance.status,

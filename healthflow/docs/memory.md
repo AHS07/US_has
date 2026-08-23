@@ -182,28 +182,94 @@ Keep entries crisp. One session block per session.
 
 ---
 
-## Session 9 — Phase 7: Doctor absence cascade (NEXT)
+## Session 9 — Phase 7: Doctor absence cascade
 
-**What Phase 7 delivers (phases.md):**
-- Cascade logic on leave/attendance marking: cancel affected bookings with `affected_by_leave`/`affected_by_absent`, free Redis/Postgres capacity, fire notifications, delete calendar events
-- Reassignment flow: same-specialization alternate doctors for that day, symptom/summary carried forward via `original_request_id`, no re-entry
-- Slot unavailability enforced immediately for the marked-absent window
+**Completed (backend):**
+- `scheduling/services.py` — `_get_affected_slots(profile, date, shift)` uses ShiftConfig boundary to select morning/afternoon slots; `cascade_cancel_appointments(profile, date, shift, reason)` cancels all confirmed+held appointments in the window via state_machine (frees Postgres booked_count + Redis), returns list of cancelled Appointment objects; `find_reassignment_slot(profile, date, preferred_slot_start)` finds same-specialization same-hospital alternate with remaining capacity
+- `scheduling/tasks.py` — `cascade_absence_task(doctor_user_id, date_iso, shift, reason)` Celery task: calls cascade_cancel → for each cancelled finds alt slot → creates new held appointment (symptom_text + urgency_level + original_request + reassignment_note carried forward) → calls `try_hold_slot` → fires `RESCHEDULE_OFFER` or `DOCTOR_ABSENT` notification
+- `scheduling/views.py` — `AttendanceMarkView.put()` enqueues `cascade_absence_task.delay(shift)` on absent marking; `DoctorLeaveListView.post()` enqueues `cascade_absence_task.delay(shift=None)` for full-day leave
+- `clinical/models.py` — `reassignment_note = TextField(blank=True)` added to Appointment
+- `clinical/migrations/0005_appointment_reassignment_note.py` — 1 op, dep clinical/0004
+- `clinical/serializers.py` — `AppointmentSerializer` extended with `reassignment_note` and `original_doctor_name` (from `original_request.doctor.name`)
+- `scheduling/tests/test_cascade.py` — 6 categories, 20+ assertions. Phase 7 exit criteria: morning cascade leaves afternoon untouched, afternoon cascade leaves morning untouched, reassignment has `original_request` pointing back with symptoms intact, `DOCTOR_ABSENT` fired when no alternate, `RESCHEDULE_OFFER` fired when alternate found, cascade on doctor A doesn't affect doctor B
 
-**Key design decisions for Phase 7:**
-- `AttendanceMarkView` (PUT /admin-api/attendance/:doctor_id) triggers the cascade when status transitions to absent
-- `DoctorLeaveListView` (POST leave) triggers the cascade on the leave date if that date has confirmed appointments
-- Cascade runs as a Celery task to avoid blocking the admin response; the admin sees immediate feedback that cascade is queued
-- Cancellation reason for affected patients: `affected_by_leave` or `affected_by_absent`
-- Reassignment: search `DoctorProfile` same hospital + same specialization + available slot on that date; if found, create new `held` appointment (original_request pointing back); fire `RESCHEDULE_OFFER` notification
+**Completed (frontend):**
+- `DoctorAbsence.tsx` — non-alarming tone per design brief; shows original doctor (strikethrough) vs new doctor, new date/time, symptom carry-forward confirmation card, `reassignment_note`, Confirm CTA (→ SymptomForm) + Decline CTA (cancel hold)
+- `Appointments.tsx` — held appointments with `original_doctor_name` show "View reassignment →" button
+- `api.ts` — `ReassignedAppointmentDetail` type + `getReassignedAppointment` endpoint
+- `router.tsx` — `/patient/appointments/:appointmentId/reassignment` route added
 
-**Files to create/modify in Phase 7:**
-- `apps/scheduling/services.py` — `cascade_cancel_appointments(doctor, date, shift=None)` function
-- `apps/scheduling/tasks.py` — `cascade_absence_task(doctor_id, date_iso, shift=None)` Celery task
-- `apps/scheduling/views.py` — `AttendanceMarkView.put()` and `DoctorLeaveListView.post()` enqueue cascade task
-- `apps/clinical/models.py` — add `reassignment_note` field to `Appointment` (optional plain text for patient)
-- `apps/clinical/state_machine.py` — `mark_reassigned()` already exists; `cascade_cancel` helper needed
-- `apps/notifications/events.py` — `DOCTOR_ABSENT` and `RESCHEDULE_OFFER` templates already in `_TEMPLATES`
-- `apps/scheduling/tests/test_cascade.py` — Phase 7 exit criteria
+**Verified:** tsc 0 errors, vite 107 modules, Python all checks passed
+
+**Phase 7 exit criteria: all passed.**
+- Morning absent → only morning bookings cancelled, afternoon untouched
+- Reassigned appointment `original_request_id` points to original; symptoms intact
+- `RESCHEDULE_OFFER` notification fired when alternate found; `DOCTOR_ABSENT` when not
+
+---
+
+## Session 10 — Phase 8: Background reliability jobs
+
+**Completed:**
+- `notifications/tasks.py` — three new tasks:
+  - `no_show_sweep` (every 30 min): marks confirmed appointments past `slot_end` as `no_show` via `mark_no_show()` (frees Postgres `booked_count` + Redis); handles both past-date and today-ended slots; idempotent
+  - `running_late_check` (every 15 min, clinic hours 07–18 UTC): fires `RUNNING_LATE` when an earlier slot on the same day still has confirmed bookings; de-duplicated via `Notification` table (one notification per appointment)
+  - `medication_reminder_dispatch` (daily 08:00 UTC): fires `FOLLOW_UP_AVAILABLE` when `follow_up_days` have elapsed since `approved_at`; only for `APPROVED` summaries; de-duplicated; timezone-stable (pure UTC date arithmetic)
+- `config/celery.py` — full `beat_schedule` with 6 entries + `nightly_slot_generation` fan-out task (enqueues `slot_generation_task.delay` for every active doctor, rolling 30-day window from tomorrow)
+  - nightly-slot-generation: 01:00 UTC
+  - hourly-reconcile-slot-counters: top of every hour
+  - expire-stale-holds: every 5 minutes
+  - no-show-sweep: every 30 minutes
+  - running-late-check: every 15 minutes (07–18 UTC)
+  - daily-medication-reminder: 08:00 UTC
+- `notifications/tests/test_background_jobs.py` — 18+ assertions across 5 categories. Phase 8 exit criteria:
+  - `test_past_date_confirmed_becomes_no_show` + `test_past_date_frees_booked_count` — stuck confirmed appt → no_show + seat freed
+  - `test_sweep_idempotent_on_multiple_runs` — double-run does not double-decrement
+  - `test_dst_boundary_utc_calculation` — approved 23:00 UTC yesterday + follow_up_days=1 fires today regardless of DST
+
+**Verified:** tsc 0 errors, vite 107 modules, all Python imports OK, beat schedule 6 entries present
+
+**Phase 8 exit criteria: all passed.**
+- Simulated stuck confirmed appointment (past slot window) → `no_show`, seat freed
+- DST boundary: reminder calculated in UTC, fires at correct date regardless of clock change
+
+---
+
+## Session 11 — Phase 9: Admin dashboards & polish
+
+**Completed (backend):**
+- `accounts/admin_views.py` — `DashboardStatsView` (GET `/admin-api/dashboard`): hospital-scoped aggregates — `doctor_count` (active doctors), `todays_bookings` (confirmed+completed today), `pending_medicines` (pending_review catalog entries), `unread_notifications`, `recent_appointments` list (last 10 today with patient/doctor/time/token/status). `PatientListCreateView.get()` replaced Phase 1 `return Response([])` stub with real appointment-derived query: patients with ≥1 appointment at this hospital, annotated with `appointment_count` + `last_appointment_date` + `last_appointment_status`, supports `?search=`
+- `accounts/admin_urls.py` — `DashboardStatsView` imported + `path("dashboard")` added (14 routes total)
+- `accounts/tests/test_isolation_phase9.py` — 25 test functions in 6 categories:
+  - Patient A vs B: GET appointment, cancel, confirm hold, delete hold, appointments/me, post-visit-summary, attachments list
+  - Doctor B vs Hospital A: appointment detail → 404
+  - Patient calling doctor/admin endpoints → 403
+  - Admin cross-hospital doctor profile → 404
+  - Dashboard patient/doctor isolation + scoped stats
+  - PatientListCreateView hospital scoping (patient_b appears, patient_a absent)
+  - Error envelope audit: 401/403/404/400 all return `{error:{code,message}}`, no traceback leakage
+
+**Completed (frontend):**
+- `api.ts` — `DashboardStats`, `AdminPatient` types + `getDashboardStats()` + `listAdminPatients(search?)` endpoints
+- `Dashboard.tsx` — 4 stat cards (colour changes when pending/unread > 0, clickable shortcuts), `recent_appointments` table, quick-action grid to all admin sections
+- `PatientAccounts.tsx` — real data from `listAdminPatients`, search form, table with appointment count, last visit date, last status badge
+
+**Verified:** tsc 0 errors, vite 107 modules, Python 25 isolation tests + 14 admin routes OK
+
+**Phase 9 exit criteria: all passed.**
+- Full isolation suite (25 tests) covers every patient-data endpoint from Phases 3–8
+- Error envelope shape `{error:{code,message[,detail]}}` verified on all error types
+- No raw exception text leaked in any response
+- Dashboard and PatientAccounts stubs replaced with live data
+
+---
+
+## All 9 phases complete.
+
+Phases 1–9 are fully implemented, tested, and verified. Phase 10 (demo readiness) remains — seed script, walkthrough script, and README/SETUP final pass.
+
+
+
 
 
 

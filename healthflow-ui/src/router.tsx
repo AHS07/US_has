@@ -16,6 +16,7 @@ import Appointments from '@/pages/patient/Appointments'
 import Notifications from '@/pages/patient/Notifications'
 import Profile from '@/pages/patient/Profile'
 import PostVisitSummary from '@/pages/patient/PostVisitSummary'        // Phase 5
+import DoctorAbsence from '@/pages/patient/DoctorAbsence'             // Phase 7
 
 // Doctor
 import DoctorLayout from '@/pages/doctor/DoctorLayout'
@@ -73,6 +74,11 @@ export const router = createBrowserRouter([
       {
         path: 'appointments/:appointmentId/summary',
         element: <ProtectedRoute role="patient"><PostVisitSummary /></ProtectedRoute>,
+      },
+      // Phase 7: doctor absence / reassignment
+      {
+        path: 'appointments/:appointmentId/reassignment',
+        element: <ProtectedRoute role="patient"><DoctorAbsence /></ProtectedRoute>,
       },
       {
         path: 'notifications',

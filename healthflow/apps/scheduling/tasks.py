@@ -106,3 +106,139 @@ def reconcile_slot_counters() -> dict:
 
     logger.info("reconcile_slot_counters: synced %d slots", synced)
     return {"status": "ok", "synced": synced}
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 — Absence cascade task
+# ---------------------------------------------------------------------------
+
+@shared_task(
+    bind=True,
+    max_retries=2,
+    default_retry_delay=30,
+    name="scheduling.cascade_absence_task",
+    acks_late=True,
+)
+def cascade_absence_task(
+    self,
+    doctor_user_id: str,
+    date_iso: str,
+    shift: str | None = None,   # "morning" | "afternoon" | None (full day)
+    reason: str = "affected_by_absent",
+) -> dict:
+    """
+    Phase 7 cascade pipeline:
+      1. Cancel every confirmed/held appointment in the affected window
+      2. For each cancelled appointment, find a same-specialization alternate slot
+      3. If found → create a new held appointment (reassigned flow) and fire
+         RESCHEDULE_OFFER notification
+      4. If not found → fire DOCTOR_ABSENT notification
+      5. Mark the original appointment as reassigned (state_machine)
+
+    The task is idempotent: appointments already cancelled are skipped silently.
+    """
+    from apps.clinical.models import Appointment, AppointmentStatus
+    from apps.clinical.state_machine import mark_reassigned
+    from apps.scheduling.models import DoctorProfile
+    from apps.scheduling.services import cascade_cancel_appointments, find_reassignment_slot
+    from django.utils import timezone
+
+    try:
+        profile = DoctorProfile.objects.select_related(
+            "user__hospital", "shift_config"
+        ).get(user_id=doctor_user_id)
+    except DoctorProfile.DoesNotExist:
+        logger.error("cascade_absence_task: DoctorProfile not found for user_id=%s", doctor_user_id)
+        return {"status": "error", "detail": "Doctor not found."}
+
+    date = datetime.date.fromisoformat(date_iso)
+
+    try:
+        cancelled_appts = cascade_cancel_appointments(profile, date, shift, reason=reason)
+    except Exception as exc:
+        logger.exception("cascade_absence_task: cascade_cancel_appointments failed: %s", exc)
+        raise self.retry(exc=exc)
+
+    HOLD_TTL = 600  # seconds — patients have 10 min to confirm the new slot
+
+    reassigned_count = 0
+    notified_absent  = 0
+    notified_offer   = 0
+
+    for original_appt in cancelled_appts:
+        try:
+            alt_slot = find_reassignment_slot(
+                profile,
+                date,
+                preferred_slot_start=original_appt.slot.slot_start,
+            )
+
+            if alt_slot:
+                # Create new held appointment (symptom text + original_request carried forward)
+                held_until = timezone.now() + datetime.timedelta(seconds=HOLD_TTL)
+                new_appt = Appointment.objects.create(
+                    patient          = original_appt.patient,
+                    doctor           = alt_slot.doctor.user,
+                    slot             = alt_slot,
+                    hospital         = alt_slot.hospital,
+                    status           = AppointmentStatus.HELD,
+                    held_until       = held_until,
+                    symptom_text     = original_appt.symptom_text,
+                    urgency_level    = original_appt.urgency_level,
+                    original_request = original_appt,
+                    reassignment_note=(
+                        f"Reassigned from Dr {original_appt.doctor.name} "
+                        f"({_shift_label(shift)}) to "
+                        f"Dr {alt_slot.doctor.user.name} at "
+                        f"{alt_slot.slot_start.strftime('%H:%M')}."
+                    ),
+                )
+                # Decrement Redis counter for the new slot
+                from apps.scheduling.services import try_hold_slot
+                try_hold_slot(alt_slot)
+
+                # Fire RESCHEDULE_OFFER notification for the new appointment
+                try:
+                    from apps.notifications.events import fire_notification
+                    from apps.notifications.models import NotificationEventType
+                    fire_notification(NotificationEventType.RESCHEDULE_OFFER, new_appt)
+                    notified_offer += 1
+                except Exception as n_exc:
+                    logger.warning("cascade: RESCHEDULE_OFFER notification failed: %s", n_exc)
+
+                reassigned_count += 1
+
+            else:
+                # No alternate slot available — notify patient of cancellation
+                try:
+                    from apps.notifications.events import fire_notification
+                    from apps.notifications.models import NotificationEventType
+                    fire_notification(NotificationEventType.DOCTOR_ABSENT, original_appt)
+                    notified_absent += 1
+                except Exception as n_exc:
+                    logger.warning("cascade: DOCTOR_ABSENT notification failed: %s", n_exc)
+
+        except Exception as exc:
+            logger.warning(
+                "cascade_absence_task: failed to process appt %s: %s",
+                original_appt.id, exc,
+            )
+
+    result = {
+        "status":       "ok",
+        "cancelled":    len(cancelled_appts),
+        "reassigned":   reassigned_count,
+        "notified_absent": notified_absent,
+        "notified_offer":  notified_offer,
+        "doctor_id":    doctor_user_id,
+        "date":         date_iso,
+        "shift":        shift,
+    }
+    logger.info("cascade_absence_task completed: %s", result)
+    return result
+
+
+def _shift_label(shift: str | None) -> str:
+    if shift == "morning":   return "morning shift"
+    if shift == "afternoon": return "afternoon shift"
+    return "all shifts"

@@ -161,9 +161,19 @@ function AppointmentCard({
               </button>
             </>
           )}
-          {appt.status === 'held' && (
-            <p className="text-xs text-[#A0A09A]">Completing your booking…</p>
-          )}
+          {appt.status === 'held' && (appt as any).original_doctor_name
+            ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/patient/appointments/${appt.id}/reassignment`)}
+                className="text-xs text-[#E8A838] font-medium hover:text-[#7A4A00] transition-colors"
+              >
+                View reassignment →
+              </button>
+            ) : appt.status === 'held' ? (
+              <p className="text-xs text-[#A0A09A]">Completing your booking…</p>
+            ) : null
+          }
         </div>
       )}
     </article>

@@ -213,3 +213,137 @@ def try_hold_slot(slot: AppointmentSlot) -> bool:
         return False
 
     return True
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 — Absence cascade helpers
+# ---------------------------------------------------------------------------
+
+from typing import NamedTuple as _NamedTuple  # already imported above; guard
+
+
+class CascadeResult(_NamedTuple):
+    cancelled: int      # appointments cancelled
+    reassigned: int     # new held appointments created for same-spec doctors
+    notified: int       # DOCTOR_ABSENT notifications fired
+
+
+def _get_affected_slots(
+    profile: DoctorProfile,
+    date: datetime.date,
+    shift: str | None,  # "morning" | "afternoon" | None (= whole day)
+) -> list:
+    """
+    Return AppointmentSlot queryset for the affected window.
+    shift=None means all slots on the date (full-day leave).
+    shift="morning"/"afternoon" means only slots in that half-day.
+    """
+    qs = AppointmentSlot.objects.filter(doctor=profile, date=date)
+
+    if shift is not None:
+        # Determine the boundary from ShiftConfig
+        try:
+            sc = profile.shift_config
+            if shift == "morning":
+                qs = qs.filter(slot_start__lt=sc.shift_2_start)
+            else:
+                qs = qs.filter(slot_start__gte=sc.shift_2_start)
+        except ShiftConfig.DoesNotExist:
+            pass  # no config → treat all slots as affected
+
+    return list(qs.order_by("slot_start"))
+
+
+def cascade_cancel_appointments(
+    profile: DoctorProfile,
+    date: datetime.date,
+    shift: str | None = None,
+    reason: str = "affected_by_absent",
+) -> list:
+    """
+    Cancel every confirmed or held appointment in the affected slot window.
+
+    Returns a list of cancelled Appointment objects so the caller can
+    attempt reassignment and fire notifications.
+
+    Each cancellation:
+      - Transitions the appointment via state_machine (frees Postgres + Redis)
+      - Sets cancel_reason to reason ("affected_by_absent" or "affected_by_leave")
+
+    Does NOT fire notifications — caller handles that after reassignment attempts.
+    """
+    from apps.clinical.models import Appointment, AppointmentStatus
+    from apps.clinical.state_machine import cancel_confirmed, cancel_hold
+
+    affected_slots = _get_affected_slots(profile, date, shift)
+    slot_ids       = [s.id for s in affected_slots]
+
+    appointments = (
+        Appointment.objects
+        .filter(
+            slot_id__in=slot_ids,
+            status__in=[AppointmentStatus.CONFIRMED, AppointmentStatus.HELD],
+        )
+        .select_related("patient", "doctor", "slot", "hospital")
+        .order_by("slot__slot_start", "token")
+    )
+
+    cancelled = []
+    for appt in appointments:
+        try:
+            if appt.status == AppointmentStatus.CONFIRMED:
+                cancel_confirmed(appt, reason=reason)
+            else:
+                cancel_hold(appt)
+            cancelled.append(appt)
+        except Exception as exc:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "cascade_cancel_appointments: failed to cancel appt %s: %s", appt.id, exc
+            )
+
+    return cancelled
+
+
+def find_reassignment_slot(
+    original_profile: DoctorProfile,
+    date: datetime.date,
+    preferred_slot_start: datetime.time | None = None,
+) -> AppointmentSlot | None:
+    """
+    Find the earliest available slot on *date* from any doctor at the same
+    hospital with the same specialization (excluding the absent doctor).
+
+    Returns the first slot with true_remaining > 0, or None if nothing found.
+    Prefers a slot that starts at or after preferred_slot_start when given.
+    """
+    from django.db.models import F
+
+    alternates = (
+        DoctorProfile.objects
+        .filter(
+            user__hospital=original_profile.user.hospital,
+            specialization=original_profile.specialization,
+            is_active=True,
+        )
+        .exclude(user_id=original_profile.user_id)
+    )
+
+    qs = (
+        AppointmentSlot.objects
+        .filter(
+            doctor__in=alternates,
+            date=date,
+            booked_count__lt=F("capacity"),
+        )
+        .select_related("doctor__user")
+        .order_by("slot_start", "booked_count")
+    )
+
+    if preferred_slot_start:
+        # Try same or later time first
+        later = qs.filter(slot_start__gte=preferred_slot_start).first()
+        if later:
+            return later
+
+    return qs.first()

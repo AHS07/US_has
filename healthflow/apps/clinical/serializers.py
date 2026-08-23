@@ -38,6 +38,7 @@ class AppointmentSerializer(serializers.ModelSerializer):
     slot_date         = serializers.DateField(source="slot.date",           read_only=True)
     slot_start        = serializers.TimeField(source="slot.slot_start",     read_only=True)
     slot_end          = serializers.TimeField(source="slot.slot_end",       read_only=True)
+    original_doctor_name = serializers.SerializerMethodField()
 
     class Meta:
         model  = Appointment
@@ -50,6 +51,8 @@ class AppointmentSerializer(serializers.ModelSerializer):
             "symptom_text", "urgency_level",
             "pre_summary_status", "ai_pre_summary_id",
             "held_until",
+            "reassignment_note",         # Phase 7
+            "original_doctor_name",      # Phase 7
             "created_at", "updated_at",
         ]
 
@@ -58,6 +61,15 @@ class AppointmentSerializer(serializers.ModelSerializer):
             return obj.doctor.doctor_profile.specialization
         except Exception:
             return ""
+
+    def get_original_doctor_name(self, obj: Appointment) -> str:
+        """Return the original doctor's name when this appointment was reassigned."""
+        try:
+            if obj.original_request:
+                return obj.original_request.doctor.name
+        except Exception:
+            pass
+        return ""
 
 
 # ---------------------------------------------------------------------------

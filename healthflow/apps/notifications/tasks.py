@@ -279,3 +279,213 @@ def expire_stale_holds() -> dict:
 
     logger.info("expire_stale_holds: cancelled %d stale holds", cancelled)
     return {"status": "ok", "cancelled": cancelled}
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 — no_show_sweep
+# ---------------------------------------------------------------------------
+
+@shared_task(name="notifications.no_show_sweep")
+def no_show_sweep() -> dict:
+    """
+    Run every 30 minutes.
+
+    Marks confirmed appointments as no_show when their slot window has closed
+    (slot.date < today OR slot.date = today AND slot.slot_end < now UTC).
+
+    Frees Postgres booked_count + Redis counter so the slot capacity is
+    correctly reflected for any future reconciliation.
+
+    Phase 8 exit criterion:
+      "A simulated stuck confirmed appointment past its slot window flips to
+       no_show and frees its seat without manual intervention."
+
+    Idempotent: already-marked appointments are never touched.
+    """
+    from apps.clinical.models import Appointment, AppointmentStatus
+    from apps.clinical.state_machine import mark_no_show
+
+    now        = timezone.now()
+    today      = now.date()
+    now_time   = now.time()
+
+    # Select confirmed appointments whose slot has ended
+    # We use two separate filters to avoid complex ORM joins:
+    #   1. Slot date is in the past
+    #   2. Slot date is today AND slot_end has passed
+    past_date_qs = Appointment.objects.filter(
+        status=AppointmentStatus.CONFIRMED,
+        slot__date__lt=today,
+    ).select_related("slot")
+
+    today_ended_qs = Appointment.objects.filter(
+        status=AppointmentStatus.CONFIRMED,
+        slot__date=today,
+        slot__slot_end__lt=now_time,
+    ).select_related("slot")
+
+    marked   = 0
+    errors   = 0
+
+    for qs in (past_date_qs, today_ended_qs):
+        for appt in qs.iterator():
+            try:
+                mark_no_show(appt)
+                marked += 1
+                logger.info(
+                    "no_show_sweep: marked %s as no_show (slot=%s %s %s)",
+                    appt.id, appt.slot.date, appt.slot.slot_start, appt.slot.slot_end,
+                )
+            except Exception as exc:
+                errors += 1
+                logger.warning("no_show_sweep: failed for %s: %s", appt.id, exc)
+
+    logger.info("no_show_sweep: marked=%d errors=%d", marked, errors)
+    return {"status": "ok", "marked_no_show": marked, "errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 — running_late_check
+# ---------------------------------------------------------------------------
+
+@shared_task(name="notifications.running_late_check")
+def running_late_check() -> dict:
+    """
+    Run every 15 minutes during clinic hours.
+
+    Structural trigger — not a timing prediction engine.
+    A slot is considered "running late" when:
+      - The slot has started (slot_start <= now)
+      - The slot has NOT ended yet (slot_end > now)
+      - The PREVIOUS slot on the same day for the same doctor still has
+        confirmed appointments (i.e. the doctor hasn't finished yet)
+      - A RUNNING_LATE notification has not been sent for this slot today
+        (de-duplication via Notification table).
+
+    Fires at most ONE RUNNING_LATE notification per patient per slot.
+    """
+    from apps.clinical.models import Appointment, AppointmentStatus
+    from apps.notifications.events import fire_notification
+    from apps.notifications.models import NotificationEventType, Notification
+
+    now      = timezone.now()
+    today    = now.date()
+    now_time = now.time()
+
+    # Current slots in progress (started but not ended yet)
+    in_progress_appts = Appointment.objects.filter(
+        status=AppointmentStatus.CONFIRMED,
+        slot__date=today,
+        slot__slot_start__lte=now_time,
+        slot__slot_end__gt=now_time,
+    ).select_related("slot", "patient", "doctor", "hospital").order_by("slot__slot_start")
+
+    notified  = 0
+    checked   = 0
+
+    for appt in in_progress_appts:
+        checked += 1
+        slot = appt.slot
+
+        # Check if any EARLIER slot for this doctor on this day still has confirmed appointments
+        earlier_confirmed = Appointment.objects.filter(
+            status=AppointmentStatus.CONFIRMED,
+            slot__doctor=slot.doctor,
+            slot__date=today,
+            slot__slot_start__lt=slot.slot_start,
+        ).exists()
+
+        if not earlier_confirmed:
+            continue  # on schedule
+
+        # De-duplicate: already sent RUNNING_LATE for this appointment today?
+        already_notified = Notification.objects.filter(
+            appointment=appt,
+            event_type=NotificationEventType.RUNNING_LATE,
+        ).exists()
+
+        if already_notified:
+            continue
+
+        try:
+            fire_notification(NotificationEventType.RUNNING_LATE, appt)
+            notified += 1
+        except Exception as exc:
+            logger.warning("running_late_check: notification failed for %s: %s", appt.id, exc)
+
+    logger.info("running_late_check: checked=%d notified=%d", checked, notified)
+    return {"status": "ok", "checked": checked, "running_late_notified": notified}
+
+
+# ---------------------------------------------------------------------------
+# Phase 8 — medication_reminder_dispatch
+# ---------------------------------------------------------------------------
+
+@shared_task(name="notifications.medication_reminder_dispatch")
+def medication_reminder_dispatch() -> dict:
+    """
+    Run daily at 08:00 UTC.
+
+    For every completed appointment that has:
+      - An approved post-visit summary
+      - follow_up_days set
+      - follow_up_days days have elapsed since approved_at (or slot date)
+      - No FOLLOW_UP_AVAILABLE notification sent yet
+
+    Fire a FOLLOW_UP_AVAILABLE in-app notification.
+
+    Timezone note: follow-up is calculated in UTC.  The beat schedule should
+    be configured to match clinic opening hours.  A DST boundary does not
+    shift the trigger more than 1 hour relative to local time — acceptable
+    for a "you may want to book a follow-up" reminder.
+
+    Idempotent: de-duplicated via the Notification table.
+    """
+    from apps.clinical.models import Appointment, AppointmentStatus, SummaryStatus
+    from apps.notifications.events import fire_notification
+    from apps.notifications.models import NotificationEventType, Notification
+    import datetime as _dt
+
+    today    = timezone.now().date()
+    notified = 0
+    checked  = 0
+
+    candidates = Appointment.objects.filter(
+        status=AppointmentStatus.COMPLETED,
+        summary_status=SummaryStatus.APPROVED,
+        follow_up_days__isnull=False,
+        approved_at__isnull=False,
+    ).select_related("patient", "doctor", "slot", "hospital")
+
+    for appt in candidates.iterator():
+        checked += 1
+
+        # Has the follow-up window arrived?
+        reference_date = (
+            appt.approved_at.date() if appt.approved_at else appt.slot.date
+        )
+        follow_up_due = reference_date + _dt.timedelta(days=appt.follow_up_days)
+
+        if today < follow_up_due:
+            continue  # not yet due
+
+        # De-duplicate: only fire once per appointment
+        if Notification.objects.filter(
+            appointment=appt,
+            event_type=NotificationEventType.FOLLOW_UP_AVAILABLE,
+        ).exists():
+            continue
+
+        try:
+            fire_notification(NotificationEventType.FOLLOW_UP_AVAILABLE, appt)
+            notified += 1
+        except Exception as exc:
+            logger.warning(
+                "medication_reminder_dispatch: notification failed for %s: %s",
+                appt.id, exc,
+            )
+
+    logger.info(
+        "medication_reminder_dispatch: checked=%d notified=%d", checked, notified
+    )
+    return {"status": "ok", "checked": checked, "follow_up_notified": notified}
