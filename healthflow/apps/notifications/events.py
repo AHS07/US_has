@@ -120,21 +120,22 @@ def fire_notification(
     ctx = _build_context(appointment, extra_context or {})
 
     try:
-        notif = Notification.objects.create(
-            patient     = appointment.patient,
-            hospital    = appointment.hospital,
-            appointment = appointment,
-            event_type  = event_type,
-            title       = template["title"].format(**ctx),
-            body        = template["body"].format(**ctx),
-        )
+        with transaction.atomic():
+            notif = Notification.objects.create(
+                patient     = appointment.patient,
+                hospital    = appointment.hospital,
+                appointment = appointment,
+                event_type  = event_type,
+                title       = template["title"].format(**ctx),
+                body        = template["body"].format(**ctx),
+            )
 
-        EmailJob.objects.create(
-            notification    = notif,
-            recipient_email = appointment.patient.email,
-            subject         = template["subject"].format(**ctx),
-            body_text       = template["email_text"].format(**ctx),
-        )
+            EmailJob.objects.create(
+                notification    = notif,
+                recipient_email = appointment.patient.email,
+                subject         = template["subject"].format(**ctx),
+                body_text       = template["email_text"].format(**ctx),
+            )
 
         # Enqueue async tasks — best-effort, don't block the response
         _enqueue_side_tasks(event_type, appointment, notif)

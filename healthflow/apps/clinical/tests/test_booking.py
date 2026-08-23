@@ -27,7 +27,7 @@ from unittest import mock
 from unittest.mock import MagicMock, patch
 
 import pytest
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -640,7 +640,7 @@ class TestIsolation(APITestCase):
 # 4. Concurrency: N concurrent holds at capacity M — never over M confirmed
 # ---------------------------------------------------------------------------
 
-class TestConcurrency(TestCase):
+class TestConcurrency(TransactionTestCase):
     """
     Simulates N threads simultaneously trying to hold and confirm a slot
     with capacity M. After all threads finish, confirmed bookings must be

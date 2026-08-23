@@ -9,14 +9,15 @@ ALLOWED_HOSTS = ["*"]
 # Use console email backend in dev — no SMTP server needed
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
-# Use SQLite for local dev/CI when Postgres is not running.
-# Docker Compose still uses Postgres — this only applies outside Docker.
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",  # noqa: F405  (BASE_DIR from base.py)
+# By default in dev, use PostgreSQL configured in base.py (connected via .env).
+# Fall back to SQLite only if USE_SQLITE is explicitly enabled.
+if config("USE_SQLITE", cast=bool, default=False):  # noqa: F405
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",  # noqa: F405
+        }
     }
-}
 
 # django-debug-toolbar (only if installed — guard so Phase 0 works before full install)
 try:

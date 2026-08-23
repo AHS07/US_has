@@ -116,7 +116,7 @@ def pre_visit_llm_job(self, appointment_id: str) -> dict:
         # Retry the Celery task (not the LLM call — that already retried internally)
         try:
             raise self.retry(exc=exc)
-        except self.MaxRetriesExceededError:
+        except (self.MaxRetriesExceededError, Exception):
             logger.error(
                 "pre_visit_llm_job: max retries exceeded for %s — marking unavailable",
                 appointment_id,
@@ -138,23 +138,27 @@ def pre_visit_llm_job(self, appointment_id: str) -> dict:
         final_urgency     = rule_urgency
         urgency_override  = True
         logger.info(
-            "pre_visit_llm_job: urgency override for %s: LLM=%s → rule=%s (keywords=%s)",
+            "pre_visit_llm_job: urgency override for %s: LLM=%s -> rule=%s (keywords=%s)",
             appointment_id, llm_urgency, rule_urgency, matched_keywords,
         )
 
-    # ── 6. MongoDB audit log ─────────────────────────────────────────────────
-    mongo_id = write_pre_visit_log(
-        appointment_id   = appointment_id,
-        prompt           = prompt,
-        raw_response     = raw_text,
-        parsed           = parsed,
-        urgency_rule     = rule_urgency,
-        urgency_override = urgency_override,
-        final_urgency    = final_urgency if parsed else None,
-        status           = llm_status,
-        error_detail     = error_detail,
-        duration_ms      = duration_ms,
-    )
+    # ── 6. MongoDB audit log (best-effort) ───────────────────────────────────
+    mongo_id = None
+    try:
+        mongo_id = write_pre_visit_log(
+            appointment_id   = appointment_id,
+            prompt           = prompt,
+            raw_response     = raw_text,
+            parsed           = parsed,
+            urgency_rule     = rule_urgency,
+            urgency_override = urgency_override,
+            final_urgency    = final_urgency if parsed else None,
+            status           = llm_status,
+            error_detail     = error_detail,
+            duration_ms      = duration_ms,
+        )
+    except Exception as mongo_exc:
+        logger.error("pre_visit_llm_job: mongo write failed for %s: %s", appointment_id, mongo_exc)
 
     # ── 7. Update Appointment ────────────────────────────────────────────────
     if parsed:
@@ -305,25 +309,29 @@ def post_visit_llm_job(self, appointment_id: str) -> dict:
         error_detail = str(exc)
         try:
             raise self.retry(exc=exc)
-        except self.MaxRetriesExceededError:
+        except (self.MaxRetriesExceededError, Exception):
             logger.error("post_visit_llm_job: max retries for %s", appointment_id)
     except Exception as exc:
         error_detail = str(exc)
         logger.exception("post_visit_llm_job: unexpected error for %s", appointment_id)
 
     # ── Audit log ────────────────────────────────────────────────────────────
-    mongo_id = write_pre_visit_log(
-        appointment_id   = appointment_id,
-        prompt           = prompt,
-        raw_response     = raw_text,
-        parsed           = parsed,
-        urgency_rule     = "",
-        urgency_override = False,
-        final_urgency    = None,
-        status           = llm_status,
-        error_detail     = error_detail,
-        duration_ms      = duration_ms,
-    )
+    mongo_id = None
+    try:
+        mongo_id = write_pre_visit_log(
+            appointment_id   = appointment_id,
+            prompt           = prompt,
+            raw_response     = raw_text,
+            parsed           = parsed,
+            urgency_rule     = "",
+            urgency_override = False,
+            final_urgency    = None,
+            status           = llm_status,
+            error_detail     = error_detail,
+            duration_ms      = duration_ms,
+        )
+    except Exception as mongo_exc:
+        logger.error("post_visit_llm_job: mongo write failed for %s: %s", appointment_id, mongo_exc)
 
     # ── Update appointment ───────────────────────────────────────────────────
     if parsed:

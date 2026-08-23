@@ -23,7 +23,12 @@ from typing import NamedTuple
 from django.db import transaction
 
 from apps.scheduling.models import AppointmentSlot, DoctorProfile, ShiftConfig
-from common.redis_client import slot_counter_seed
+from common.redis_client import (
+    slot_counter_decr,
+    slot_counter_get,
+    slot_counter_incr,
+    slot_counter_seed,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -93,6 +98,15 @@ def generate_slots_for_doctor(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+def _to_time(val: datetime.time | str | None) -> datetime.time | None:
+    if val is None:
+        return None
+    if isinstance(val, str):
+        parts = [int(p) for p in val.split(":")]
+        return datetime.time(*parts)
+    return val
+
+
 def _build_windows(
     shift: ShiftConfig,
     date: datetime.date,
@@ -106,12 +120,15 @@ def _build_windows(
     """
     windows: list[tuple[datetime.time, datetime.time]] = []
 
-    for window_start, window_end in (
+    for raw_start, raw_end in (
         (shift.shift_1_start, shift.shift_1_end),
         (shift.shift_2_start, shift.shift_2_end),
     ):
+        window_start = _to_time(raw_start)
+        window_end = _to_time(raw_end)
+
         # Skip degenerate windows (e.g. if shift_2 not configured)
-        if window_start >= window_end:
+        if not window_start or not window_end or window_start >= window_end:
             continue
 
         current = _time_to_dt(date, window_start)
@@ -174,9 +191,10 @@ def _upsert_slot(
     return 1, 0
 
 
-def _time_to_dt(date: datetime.date, t: datetime.time) -> datetime.datetime:
+def _time_to_dt(date: datetime.date, t: datetime.time | str) -> datetime.datetime:
     """Combine a date and time into a naive datetime for arithmetic."""
-    return datetime.datetime.combine(date, t)
+    parsed = _to_time(t)
+    return datetime.datetime.combine(date, parsed)
 
 
 # ---------------------------------------------------------------------------
@@ -194,8 +212,6 @@ def try_hold_slot(slot: AppointmentSlot) -> bool:
     bookings are never blocked by a Redis outage (at the cost of slightly
     less precise over-booking protection until reconciliation runs).
     """
-    from common.redis_client import slot_counter_decr, slot_counter_incr, slot_counter_get
-
     # Warm the counter from Postgres if it was never seeded (restart scenario)
     if slot_counter_get(str(slot.id)) is None:
         remaining = slot.capacity - slot.booked_count

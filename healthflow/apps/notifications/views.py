@@ -17,6 +17,7 @@ Google Calendar OAuth (doctor):
 from __future__ import annotations
 
 import logging
+import requests as http_requests
 
 from django.conf import settings
 from django.http import HttpResponseRedirect

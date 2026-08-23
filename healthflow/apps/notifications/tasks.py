@@ -18,6 +18,7 @@ import datetime
 import logging
 
 from celery import shared_task
+from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,6 @@ def send_email_job(self, email_job_id: str) -> dict:
       after 5   → status = failed, no more retries
     """
     from apps.notifications.models import EmailJob, EmailJobStatus
-    from django.core.mail import EmailMultiAlternatives
     from django.conf import settings
 
     try:

@@ -141,9 +141,10 @@ class TestNoShowSweep(TestCase):
         """
         from apps.notifications.tasks import no_show_sweep
 
-        today     = datetime.date.today()
-        past_time = (timezone.now() - datetime.timedelta(hours=2)).time()
-        end_time  = (timezone.now() - datetime.timedelta(hours=1)).time()
+        now       = timezone.now()
+        today     = now.date()
+        past_time = (now - datetime.timedelta(hours=2)).time()
+        end_time  = (now - datetime.timedelta(hours=1)).time()
         slot = _slot(self.profile, today, past_time, end_time, booked=0)
         appt = _confirmed(self.patient, slot)
 
@@ -156,7 +157,7 @@ class TestNoShowSweep(TestCase):
     def test_future_slot_not_touched(self):
         from apps.notifications.tasks import no_show_sweep
 
-        future_date = datetime.date.today() + datetime.timedelta(days=3)
+        future_date = timezone.now().date() + datetime.timedelta(days=3)
         slot = _slot(self.profile, future_date, datetime.time(9, 0), datetime.time(10, 0))
         appt = _confirmed(self.patient, slot)
 
@@ -170,9 +171,10 @@ class TestNoShowSweep(TestCase):
         """An in-progress slot (started, not ended) must not be swept."""
         from apps.notifications.tasks import no_show_sweep
 
-        today      = datetime.date.today()
-        start_time = (timezone.now() - datetime.timedelta(minutes=10)).time()
-        end_time   = (timezone.now() + datetime.timedelta(minutes=50)).time()
+        now        = timezone.now()
+        today      = now.date()
+        start_time = (now - datetime.timedelta(minutes=10)).time()
+        end_time   = (now + datetime.timedelta(minutes=50)).time()
         slot = _slot(self.profile, today, start_time, end_time, booked=0)
         appt = _confirmed(self.patient, slot)
 
@@ -248,14 +250,12 @@ class TestRunningLateCheck(TestCase):
     def test_fires_when_earlier_slot_still_confirmed(self):
         from apps.notifications.tasks import running_late_check
 
-        today      = datetime.date.today()
-        now        = timezone.now()
-        # Earlier slot: started 90 min ago, ended 30 min ago
-        early_start = (now - datetime.timedelta(minutes=90)).time()
-        early_end   = (now - datetime.timedelta(minutes=30)).time()
-        # Current slot: started 5 min ago, ends in 55 min
-        curr_start  = (now - datetime.timedelta(minutes=5)).time()
-        curr_end    = (now + datetime.timedelta(minutes=55)).time()
+        fake_now = datetime.datetime(2026, 8, 24, 10, 30, 0, tzinfo=datetime.timezone.utc)
+        today = fake_now.date()
+        early_start = datetime.time(9, 0)
+        early_end   = datetime.time(10, 0)
+        curr_start  = datetime.time(10, 0)
+        curr_end    = datetime.time(11, 0)
 
         early_slot = _slot(self.profile, today, early_start, early_end)
         curr_slot  = _slot(self.profile, today, curr_start, curr_end)
@@ -267,11 +267,10 @@ class TestRunningLateCheck(TestCase):
         appt_curr = _confirmed(self.patient, curr_slot)
 
         fired_events = []
-        def capture(event_type, appt, **kw):
-            fired_events.append(event_type)
-
-        with patch("apps.notifications.events.fire_notification", side_effect=capture):
-            running_late_check()
+        with patch("django.utils.timezone.now", return_value=fake_now):
+            with patch("apps.notifications.events.fire_notification",
+                       side_effect=lambda et, a, **k: fired_events.append(et)):
+                running_late_check()
 
         self.assertIn(NotificationEventType.RUNNING_LATE, fired_events)
 

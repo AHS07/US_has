@@ -196,13 +196,13 @@ class ConfirmView(APIView):
 
             confirm(appointment, symptom_text=symptom_text, token=token)
 
-    # Phase 6: fire booking_confirmed notification (best-effort, after commit)
-    try:
-        from apps.notifications.events import fire_notification
-        from apps.notifications.models import NotificationEventType
-        fire_notification(NotificationEventType.BOOKING_CONFIRMED, appointment)
-    except Exception as exc:
-        logger.warning("state_machine.confirm: notification failed for %s: %s", appointment.id, exc)
+        # Phase 6: fire booking_confirmed notification (best-effort, after commit)
+        try:
+            from apps.notifications.events import fire_notification
+            from apps.notifications.models import NotificationEventType
+            fire_notification(NotificationEventType.BOOKING_CONFIRMED, appointment)
+        except Exception as exc:
+            logger.warning("state_machine.confirm: notification failed for %s: %s", appointment.id, exc)
 
         # Phase 4: enqueue pre-visit LLM job — fire-and-forget, never blocks confirm
         try:

@@ -467,8 +467,7 @@ class TestCalendarOAuthAPI(APITestCase):
 
         with patch("apps.integrations.calendar.client.GoogleCalendarClient.build_oauth_flow",
                    return_value=mock_flow):
-            with patch.object(self.client, "session", {}, create=True):
-                resp = self.client.get("/doctor/calendar/connect", **_auth(self.doc_user))
+            resp = self.client.get("/doctor/calendar/connect", **_auth(self.doc_user))
 
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.assertIn("auth_url", resp.data)

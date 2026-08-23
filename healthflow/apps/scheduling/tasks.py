@@ -13,6 +13,7 @@ import datetime
 import logging
 
 from celery import shared_task
+from common.redis_client import slot_counter_set
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,6 @@ def reconcile_slot_counters() -> dict:
     This corrects any drift from crashed processes or missed INCR/DECR calls.
     """
     from apps.scheduling.models import AppointmentSlot
-    from common.redis_client import slot_counter_set
 
     today = datetime.date.today()
 

@@ -41,6 +41,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-healthflow}"]
       interval: 5s
@@ -68,8 +69,9 @@ services:
       retries: 10
 
   frontend:
-    # Placeholder — replace with your actual frontend build/image
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
     ports:
       - "3000:80"
     depends_on:
