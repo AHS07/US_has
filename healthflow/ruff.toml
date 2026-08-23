@@ -1,0 +1,14 @@
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W", "I", "N", "UP", "S", "B", "A", "C4", "PT"]
+ignore = [
+    "S101",   # assert used in tests
+    "S105",   # possible hardcoded password (false positives in .env.example context)
+]
+
+[lint.per-file-ignores]
+"*/tests/*" = ["S", "N"]
+"*/migrations/*" = ["E501"]
+"config/settings/*" = ["F405", "F403"]  # wildcard imports in settings/dev.py and prod.py are intentional

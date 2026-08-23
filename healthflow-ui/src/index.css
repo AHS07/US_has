@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+:root {
+  --eucalyptus: #98AA9D;
+  --mist: #B3C9D6;
+  --plaster: #F2EFE2;
+  --soot: #2D3536;
+  --moss: #697C70;
+
+  --urgency-low-bg: #D6E8F0;
+  --urgency-low-text: #2A6080;
+  --urgency-medium-bg: #FDE8C0;
+  --urgency-medium-text: #7A4A00;
+  --urgency-high-bg: #F5D0CC;
+  --urgency-high-text: #8B1A1A;
+
+  --font-serif: 'DM Serif Display', serif;
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 16px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  color: var(--soot);
+  background: var(--plaster);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--eucalyptus); border-radius: 99px; }
+
+/* Typography helpers */
+.font-serif { font-family: var(--font-serif); }
+.font-mono  { font-family: var(--font-mono); }
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid var(--eucalyptus);
+  outline-offset: 2px;
+}
+
+/* Entrance animations */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.anim-fadeInUp    { animation: fadeInUp    0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-fadeIn      { animation: fadeIn      0.4s ease both; }
+.anim-slideInRight{ animation: slideInRight 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+.delay-1 { animation-delay: 0.05s; }
+.delay-2 { animation-delay: 0.10s; }
+.delay-3 { animation-delay: 0.15s; }
+.delay-4 { animation-delay: 0.20s; }
+.delay-5 { animation-delay: 0.25s; }
+.delay-6 { animation-delay: 0.30s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

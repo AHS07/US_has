@@ -1,0 +1,7 @@
+-r base.txt
+
+# Production WSGI server
+gunicorn==22.0.0
+
+# Sentry (optional, for error tracking)
+# sentry-sdk==2.7.1

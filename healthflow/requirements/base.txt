@@ -1,0 +1,32 @@
+# Core
+Django==4.2.13
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+
+# Database
+psycopg2-binary==2.9.9
+pymongo==4.7.3
+redis==5.0.6
+
+# Celery
+celery==5.4.0
+django-celery-beat==2.6.0
+
+# Utilities
+python-decouple==3.8
+Pillow==10.4.0
+python-dateutil==2.9.0
+
+# Email
+sendgrid==6.11.0
+
+# Google Calendar
+google-auth==2.30.0
+google-auth-oauthlib==1.2.0
+google-api-python-client==2.134.0
+
+# LLM client (Azure OpenAI / compatible zero-retention endpoint)
+openai==1.35.3
+
+# Security / encryption
+cryptography==42.0.8
