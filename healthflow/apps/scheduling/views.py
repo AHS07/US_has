@@ -495,6 +495,34 @@ class DoctorDayView(APIView):
                 pass
             return ShiftName.AFTERNOON
 
+        from apps.clinical.models import Appointment, AppointmentStatus
+
+        appts = (
+            Appointment.objects.filter(
+                slot__in=slots,
+                status__in=[
+                    AppointmentStatus.CONFIRMED,
+                    AppointmentStatus.COMPLETED,
+                    AppointmentStatus.HELD,
+                ],
+            )
+            .select_related("patient")
+            .order_by("token", "created_at")
+        )
+
+        appts_by_slot: dict[str, list] = {}
+        for appt in appts:
+            appts_by_slot.setdefault(str(appt.slot_id), []).append({
+                "id":                str(appt.id),
+                "name":              appt.patient.name,
+                "age":               getattr(appt.patient, "age", 30) or 30,
+                "token":             appt.token or 0,
+                "chief_complaint":   appt.symptom_text[:80] if appt.symptom_text else "No symptoms provided",
+                "urgency":           appt.urgency_level or "Low",
+                "ai_summary_status": appt.pre_summary_status,
+                "appointment_id":    str(appt.id),
+            })
+
         slot_data = []
         for slot in slots:
             shift = _shift_name(slot)
@@ -503,7 +531,7 @@ class DoctorDayView(APIView):
                 **AppointmentSlotSerializer(slot).data,
                 "shift":       shift,
                 "unavailable": unavailable,
-                "patients":    [],  # Phase 3 populates this from appointments
+                "patients":    appts_by_slot.get(str(slot.id), []),
             })
 
         return Response({
