@@ -102,3 +102,9 @@ healthflow/data/medicine_seed/*.csv
 # ── Compiled assets ───────────────────────────────────────────────────────────
 *.min.js
 *.min.css
+
+# ── Local test runners & benchmarks (not committed) ───────────────────────────
+scenario_tester.py
+healthflow/scenario_tester.py
+live_benchmarks.py
+healthflow/live_benchmarks.py
