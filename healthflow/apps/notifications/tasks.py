@@ -69,11 +69,22 @@ def send_email_job(self, email_job_id: str) -> dict:
         if job.body_html:
             msg.attach_alternative(job.body_html, "text/html")
 
-        # Attach .ics calendar file if present
-        if job.ics_attachment:
+        # Attach .ics calendar file if present (or build on the fly if needed for confirmation/reschedule)
+        ics_data = job.ics_attachment
+        if not ics_data and job.notification and job.notification.event_type in (
+            "booking_confirmed", "booking_rescheduled"
+        ) and job.notification.appointment:
+            try:
+                ics_data = _build_ics(job.notification.appointment)
+                job.ics_attachment = ics_data
+                job.save(update_fields=["ics_attachment"])
+            except Exception as ics_err:
+                logger.warning("send_email_job: on-the-fly ics generation failed: %s", ics_err)
+
+        if ics_data:
             msg.attach(
                 filename     = "appointment.ics",
-                content      = job.ics_attachment,
+                content      = ics_data,
                 mimetype     = "text/calendar",
             )
 
@@ -223,6 +234,9 @@ def sync_google_calendar_event(self, appointment_id: str, action: str) -> dict:
 
         if action == "create":
             event_id = client.create_event(appointment)
+            if event_id:
+                appointment.google_calendar_event_id = event_id
+                appointment.save(update_fields=["google_calendar_event_id"])
             logger.info(
                 "sync_google_calendar_event: created event %s for appt %s",
                 event_id, appointment_id,
@@ -235,6 +249,9 @@ def sync_google_calendar_event(self, appointment_id: str, action: str) -> dict:
 
         elif action == "delete":
             client.delete_event(appointment)
+            if appointment.google_calendar_event_id:
+                appointment.google_calendar_event_id = ""
+                appointment.save(update_fields=["google_calendar_event_id"])
             return {"status": "ok"}
 
         else:
@@ -418,11 +435,11 @@ def running_late_check() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Phase 8 — medication_reminder_dispatch
+# Phase 8 — Reminder Dispatches (Follow-up & Medication)
 # ---------------------------------------------------------------------------
 
-@shared_task(name="notifications.medication_reminder_dispatch")
-def medication_reminder_dispatch() -> dict:
+@shared_task(name="notifications.follow_up_reminder_dispatch")
+def follow_up_reminder_dispatch() -> dict:
     """
     Run daily at 08:00 UTC.
 
@@ -432,12 +449,7 @@ def medication_reminder_dispatch() -> dict:
       - follow_up_days days have elapsed since approved_at (or slot date)
       - No FOLLOW_UP_AVAILABLE notification sent yet
 
-    Fire a FOLLOW_UP_AVAILABLE in-app notification.
-
-    Timezone note: follow-up is calculated in UTC.  The beat schedule should
-    be configured to match clinic opening hours.  A DST boundary does not
-    shift the trigger more than 1 hour relative to local time — acceptable
-    for a "you may want to book a follow-up" reminder.
+    Fire a FOLLOW_UP_AVAILABLE in-app notification and email.
 
     Idempotent: de-duplicated via the Notification table.
     """
@@ -477,15 +489,138 @@ def medication_reminder_dispatch() -> dict:
             continue
 
         try:
-            fire_notification(NotificationEventType.FOLLOW_UP_AVAILABLE, appt)
+            fire_notification(
+                NotificationEventType.FOLLOW_UP_AVAILABLE,
+                appt,
+                extra_context={"follow_up_days": appt.follow_up_days},
+            )
             notified += 1
         except Exception as exc:
             logger.warning(
-                "medication_reminder_dispatch: notification failed for %s: %s",
+                "follow_up_reminder_dispatch: notification failed for %s: %s",
                 appt.id, exc,
             )
 
     logger.info(
-        "medication_reminder_dispatch: checked=%d notified=%d", checked, notified
+        "follow_up_reminder_dispatch: checked=%d notified=%d", checked, notified
     )
     return {"status": "ok", "checked": checked, "follow_up_notified": notified}
+
+
+@shared_task(name="notifications.medication_reminder_dispatch")
+def medication_reminder_dispatch() -> dict:
+    """
+    Run daily at 08:00 UTC (and/or 20:00 UTC).
+
+    Dispatches medication reminders for active prescriptions from completed,
+    doctor-approved visits.
+
+    Rules:
+      - Iterates over prescriptions whose active treatment course includes today.
+      - Sends MEDICATION_REMINDER notification with medicine name, dosage, frequency, and instructions.
+      - Strictly de-duplicated per day via MedicationReminderLog table.
+    """
+    from apps.clinical.models import AppointmentStatus, Prescription, SummaryStatus
+    from apps.notifications.events import fire_notification
+    from apps.notifications.models import (
+        MedicationReminderLog,
+        Notification,
+        NotificationEventType,
+    )
+    import datetime as _dt
+    import re as _re
+
+    today    = timezone.now().date()
+    notified = 0
+    checked  = 0
+
+    # Query prescriptions for completed, approved visits
+    active_prescriptions = Prescription.objects.filter(
+        appointment__status=AppointmentStatus.COMPLETED,
+        appointment__summary_status=SummaryStatus.APPROVED,
+        appointment__approved_at__isnull=False,
+    ).select_related(
+        "appointment",
+        "appointment__patient",
+        "appointment__doctor",
+        "appointment__hospital",
+        "medicine",
+    )
+
+    for rx in active_prescriptions.iterator():
+        checked += 1
+        appt = rx.appointment
+        ref_date = appt.approved_at.date() if appt.approved_at else appt.slot.date
+
+        # Parse duration string into days (e.g. "5 days" -> 5, "2 weeks" -> 14, default 7)
+        duration_days = 7
+        if rx.duration:
+            num_match = _re.search(r"(\d+)", rx.duration)
+            if num_match:
+                val = int(num_match.group(1))
+                if "week" in rx.duration.lower():
+                    duration_days = val * 7
+                elif "month" in rx.duration.lower():
+                    duration_days = val * 30
+                else:
+                    duration_days = val
+
+        treatment_end_date = ref_date + _dt.timedelta(days=duration_days)
+
+        slots = rx.get_reminder_slots()
+        for slot_name in slots:
+            # Check if already notified today for this prescription and time slot
+            already_sent = MedicationReminderLog.objects.filter(
+                prescription=rx,
+                reminder_date=today,
+                time_slot=slot_name,
+            ).exists()
+
+            if already_sent:
+                continue
+
+            try:
+                notif = fire_notification(
+                    NotificationEventType.MEDICATION_REMINDER,
+                    appt,
+                    extra_context={
+                        "medicine_name": rx.medicine.name,
+                        "dosage":        rx.dosage,
+                        "frequency":     rx.get_frequency_display(),
+                        "instructions":  rx.instructions or "Take as prescribed",
+                        "time_slot":     slot_name,
+                    },
+                )
+                # Only mark as sent if fire_notification succeeded
+                if notif is not None:
+                    MedicationReminderLog.objects.create(
+                        patient=appt.patient,
+                        prescription=rx,
+                        reminder_date=today,
+                        time_slot=slot_name,
+                    )
+                    notified += 1
+            except Exception as exc:
+                logger.warning(
+                    "medication_reminder_dispatch: notification failed for rx %s slot %s: %s",
+                    rx.id, slot_name, exc,
+                )
+
+    # Also trigger follow_up check as part of daily cycle
+    follow_up_count = 0
+    try:
+        fu_res = follow_up_reminder_dispatch()
+        follow_up_count = fu_res.get("follow_up_notified", 0)
+    except Exception as exc:
+        logger.warning("medication_reminder_dispatch: follow_up call failed: %s", exc)
+
+    logger.info(
+        "medication_reminder_dispatch: checked=%d rx_notified=%d fu_notified=%d",
+        checked, notified, follow_up_count,
+    )
+    return {
+        "status": "ok",
+        "checked": checked,
+        "medication_notified": notified,
+        "follow_up_notified": follow_up_count,
+    }

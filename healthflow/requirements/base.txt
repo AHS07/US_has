@@ -31,3 +31,6 @@ openai==1.35.3
 
 # Security / encryption
 cryptography==42.0.8
+
+# WSGI Server (Production)
+gunicorn==22.0.0

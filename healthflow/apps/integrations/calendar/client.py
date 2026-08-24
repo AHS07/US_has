@@ -72,11 +72,11 @@ class GoogleCalendarClient:
 
     def update_event(self, appointment) -> None:
         """
-        Update the existing Calendar event whose summary contains the appointment UID.
-        Uses the appointment UUID as a stable lookup key in the event description.
+        Update the existing Calendar event for the appointment.
+        Uses persisted google_calendar_event_id when available, falling back to text search.
         """
         service  = self._get_service()
-        event_id = self._find_event_id(service, appointment)
+        event_id = getattr(appointment, "google_calendar_event_id", "") or self._find_event_id(service, appointment)
         if not event_id:
             # Not found — create instead (idempotent)
             self.create_event(appointment)
@@ -94,10 +94,10 @@ class GoogleCalendarClient:
     def delete_event(self, appointment) -> None:
         """
         Delete the Calendar event for this appointment.
-        No-op if the event does not exist (already deleted).
+        Uses persisted google_calendar_event_id when available, falling back to text search.
         """
         service  = self._get_service()
-        event_id = self._find_event_id(service, appointment)
+        event_id = getattr(appointment, "google_calendar_event_id", "") or self._find_event_id(service, appointment)
         if not event_id:
             logger.info(
                 "GoogleCalendarClient.delete_event: no event found for appt %s — skipping",

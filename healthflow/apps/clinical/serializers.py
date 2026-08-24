@@ -235,9 +235,10 @@ class PreVisitAttachmentSerializer(serializers.ModelSerializer):
 
     def get_file_url(self, obj: PreVisitAttachment) -> str:
         request = self.context.get("request")
-        if request and obj.file:
-            return request.build_absolute_uri(obj.file.url)
-        return obj.file.url if obj.file else ""
+        url_path = f"/appointments/attachments/{obj.id}/download"
+        if request:
+            return request.build_absolute_uri(url_path)
+        return url_path
 
 
 class AttachmentUploadSerializer(serializers.Serializer):
@@ -365,18 +366,19 @@ class PrescriptionReadSerializer(serializers.ModelSerializer):
         fields = [
             "id", "medicine_id", "medicine_name",
             "dosage", "frequency", "frequency_display",
-            "duration", "instructions", "sort_order",
+            "duration", "instructions", "reminder_times", "sort_order",
         ]
 
 
 class PrescriptionWriteSerializer(serializers.Serializer):
     """One prescription row inside ConsultationSerializer."""
-    medicine_id  = serializers.UUIDField()
-    dosage       = serializers.CharField(max_length=100)
-    frequency    = serializers.ChoiceField(choices=[c[0] for c in Prescription.FREQUENCY_CHOICES])
-    duration     = serializers.CharField(max_length=50)
-    instructions = serializers.CharField(required=False, default="", allow_blank=True)
-    sort_order   = serializers.IntegerField(required=False, default=0)
+    medicine_id    = serializers.UUIDField()
+    dosage         = serializers.CharField(max_length=100)
+    frequency      = serializers.ChoiceField(choices=[c[0] for c in Prescription.FREQUENCY_CHOICES])
+    duration       = serializers.CharField(max_length=50)
+    instructions   = serializers.CharField(required=False, default="", allow_blank=True)
+    reminder_times = serializers.ListField(child=serializers.CharField(), required=False, default=list)
+    sort_order     = serializers.IntegerField(required=False, default=0)
 
     def validate_medicine_id(self, value):
         request  = self.context.get("request")

@@ -98,12 +98,49 @@ def write_pre_visit_log(
         result = _get_collection().insert_one(doc)
         return str(result.inserted_id)
     except Exception as exc:
-        logger.error("llm_audit_log write failed for appointment %s: %s", appointment_id, exc)
+        logger.error("llm_audit_log write failed for appointment %s (pre_visit): %s", appointment_id, exc)
+        return None
+
+
+def write_post_visit_log(
+    *,
+    appointment_id: str,
+    prompt: str,
+    raw_response: str,
+    parsed: dict[str, Any] | None,
+    status: str,             # "ok" | "malformed" | "llm_error"
+    error_detail: str | None = None,
+    duration_ms: int = 0,
+) -> str | None:
+    """
+    Write a post-visit audit log entry to MongoDB.
+
+    Returns the inserted document _id as a string, or None on failure.
+    Preserves audit separation from pre_visit records.
+    """
+    doc = {
+        "appointment_id":   appointment_id,
+        "call_type":        "post_visit",
+        "prompt":           prompt,
+        "raw_response":     raw_response,
+        "parsed":           parsed,
+        "status":           status,
+        "error_detail":     error_detail,
+        "duration_ms":      duration_ms,
+        "model":            getattr(settings, "LLM_MODEL",   "unknown"),
+        "backend":          getattr(settings, "LLM_BACKEND", "huggingface"),
+        "created_at":       datetime.datetime.utcnow(),
+    }
+    try:
+        result = _get_collection().insert_one(doc)
+        return str(result.inserted_id)
+    except Exception as exc:
+        logger.error("llm_audit_log write failed for appointment %s (post_visit): %s", appointment_id, exc)
         return None
 
 
 # ---------------------------------------------------------------------------
-# Read helpers (used by Phase 5 approval gate)
+# Read & Update helpers (used by Phase 5 approval gate & summary views)
 # ---------------------------------------------------------------------------
 
 def get_pre_visit_log(appointment_id: str) -> dict[str, Any] | None:
@@ -118,6 +155,84 @@ def get_pre_visit_log(appointment_id: str) -> dict[str, Any] | None:
         )
     except Exception as exc:
         logger.error(
-            "llm_audit_log read failed for appointment %s: %s", appointment_id, exc
+            "llm_audit_log read failed for appointment %s (pre_visit): %s", appointment_id, exc
         )
         return None
+
+
+def log_doctor_summary_approval(
+    *,
+    appointment_id: str,
+    summary_text: str,
+    doctor_id: str | None = None,
+    follow_up_note: str | None = None,
+) -> str | None:
+    """
+    Write an immutable doctor approval/edit audit record to MongoDB.
+    Does NOT mutate the original LLM generation document.
+    """
+    doc = {
+        "appointment_id": appointment_id,
+        "call_type":      "doctor_approval",
+        "summary_text":   summary_text,
+        "follow_up_note": follow_up_note,
+        "approved_by_id": str(doctor_id) if doctor_id else None,
+        "status":         "ok",
+        "created_at":     datetime.datetime.utcnow(),
+    }
+    try:
+        result = _get_collection().insert_one(doc)
+        return str(result.inserted_id)
+    except Exception as exc:
+        logger.error(
+            "log_doctor_summary_approval write failed for appointment %s: %s",
+            appointment_id, exc,
+        )
+        return None
+
+
+def get_post_visit_log(appointment_id: str) -> dict[str, Any] | None:
+    """
+    Return the most recent post-visit summary for the appointment.
+    Checks doctor approval audit events first, falling back to the raw LLM draft.
+    """
+    try:
+        # Check for doctor approved/edited document first
+        approved_doc = _get_collection().find_one(
+            {"appointment_id": appointment_id, "call_type": "doctor_approval", "status": "ok"},
+            sort=[("created_at", pymongo.DESCENDING)],
+        )
+        if approved_doc:
+            return {
+                "_id": approved_doc.get("_id"),
+                "appointment_id": appointment_id,
+                "call_type": "doctor_approval",
+                "parsed": {
+                    "summary_text":   approved_doc.get("summary_text", ""),
+                    "follow_up_note": approved_doc.get("follow_up_note"),
+                },
+                "status": "ok",
+            }
+
+        # Fallback to LLM post_visit draft document
+        return _get_collection().find_one(
+            {"appointment_id": appointment_id, "call_type": "post_visit", "status": "ok"},
+            sort=[("created_at", pymongo.DESCENDING)],
+        )
+    except Exception as exc:
+        logger.error(
+            "llm_audit_log read failed for appointment %s (post_visit): %s", appointment_id, exc
+        )
+        return None
+
+
+def update_post_visit_summary(appointment_id: str, edited_text: str, doctor_id: str | None = None) -> bool:
+    """
+    Backward-compatible wrapper that creates an immutable doctor approval audit log.
+    """
+    inserted_id = log_doctor_summary_approval(
+        appointment_id=appointment_id,
+        summary_text=edited_text,
+        doctor_id=doctor_id,
+    )
+    return inserted_id is not None

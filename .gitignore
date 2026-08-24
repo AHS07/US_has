@@ -15,9 +15,9 @@ parts/
 var/
 sdist/
 develop-eggs/
-.installed.cfg
-lib/
-lib64/
+/lib/
+/lib64/
+!healthflow-ui/src/lib/
 .eggs/
 *.whl
 MANIFEST
@@ -42,6 +42,12 @@ db.sqlite3-journal
 media/
 staticfiles/
 static_root/
+
+# ── Frontend / Node ─────────────────────────────────────────────────────────
+node_modules/
+.npm
+.yarn/
+.pnpm-store/
 
 # ── Coverage / testing ────────────────────────────────────────────────────────
 htmlcov/

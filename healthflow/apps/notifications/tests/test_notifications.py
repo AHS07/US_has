@@ -132,15 +132,13 @@ class TestFireNotification(TestCase):
 
     def test_creates_notification_and_email_job_together(self):
         """PHASE 6 EXIT CRITERION: both rows always created in the same call."""
-        n_before = Notification.objects.count()
-        e_before = EmailJob.objects.count()
-
         with patch("apps.notifications.events._enqueue_side_tasks"):
             notif = _fire(NotificationEventType.BOOKING_CONFIRMED, self.appt)
 
         self.assertIsNotNone(notif)
-        self.assertEqual(Notification.objects.count(), n_before + 1)
-        self.assertEqual(EmailJob.objects.count(),     e_before + 1)
+        self.assertEqual(Notification.objects.filter(patient=self.patient).count(), 1)
+        self.assertEqual(EmailJob.objects.filter(recipient_email=self.patient.email).count(), 1)
+        self.assertTrue(EmailJob.objects.filter(recipient_email=self.appt.doctor.email).exists())
 
     def test_email_job_linked_to_notification(self):
         with patch("apps.notifications.events._enqueue_side_tasks"):

@@ -16,7 +16,8 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import Hospital, User, UserRole
-from apps.clinical.models import PatientNote
+from apps.clinical.models import Appointment, AppointmentStatus
+from apps.scheduling.models import AppointmentSlot, DoctorProfile
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ def patient_a(db, hospital):
         password="StrongPass1!",
         name="Patient A",
         role=UserRole.PATIENT,
+        hospital=hospital,
         must_reset_password=False,
     )
 
@@ -46,17 +48,39 @@ def patient_b(db, hospital):
         password="StrongPass1!",
         name="Patient B",
         role=UserRole.PATIENT,
+        hospital=hospital,
         must_reset_password=False,
     )
 
 
 @pytest.fixture()
-def note_for_b(db, patient_b, hospital):
-    """A PatientNote that belongs to Patient B."""
-    return PatientNote.objects.create(
-        patient=patient_b,
+def appt_for_b(db, patient_b, hospital):
+    """An Appointment that belongs to Patient B."""
+    import datetime
+    doc_user = User.objects.create_user(
+        email="doc_b@test.com",
+        password="StrongPass1!",
+        name="Doctor B",
+        role=UserRole.DOCTOR,
         hospital=hospital,
-        body="Patient B's private note.",
+        must_reset_password=False,
+    )
+    doc_prof = DoctorProfile.objects.create(user=doc_user, specialization="General")
+    slot = AppointmentSlot.objects.create(
+        doctor=doc_prof,
+        hospital=hospital,
+        date=datetime.date(2026, 9, 1),
+        slot_start=datetime.time(9, 0),
+        slot_end=datetime.time(10, 0),
+        capacity=5,
+        booked_count=1,
+    )
+    return Appointment.objects.create(
+        patient=patient_b,
+        doctor=doc_user,
+        slot=slot,
+        hospital=hospital,
+        status=AppointmentStatus.CONFIRMED,
     )
 
 
@@ -73,13 +97,13 @@ def _auth_client(user: User) -> APIClient:
 # ─── Core isolation test ──────────────────────────────────────────────────────
 
 @pytest.mark.django_db()
-def test_patient_a_cannot_access_patient_b_note(patient_a, note_for_b):
+def test_patient_a_cannot_access_patient_b_note(patient_a, appt_for_b):
     """
-    Patient A's token against Patient B's note ID must not return 200.
+    Patient A's token against Patient B's appointment ID must not return 200.
     Scoped queries return 404 (not 403) so existence is not confirmed.
     """
     client = _auth_client(patient_a)
-    url = f"/clinical/notes/{note_for_b.id}"
+    url = f"/appointments/{appt_for_b.id}"
     response = client.get(url)
     assert response.status_code == status.HTTP_404_NOT_FOUND, (
         f"Expected 404, got {response.status_code}. "
@@ -88,20 +112,20 @@ def test_patient_a_cannot_access_patient_b_note(patient_a, note_for_b):
 
 
 @pytest.mark.django_db()
-def test_patient_b_can_access_own_note(patient_b, note_for_b):
-    """Patient B's token against their own note returns 200."""
+def test_patient_b_can_access_own_note(patient_b, appt_for_b):
+    """Patient B's token against their own appointment returns 200."""
     client = _auth_client(patient_b)
-    url = f"/clinical/notes/{note_for_b.id}"
+    url = f"/appointments/{appt_for_b.id}"
     response = client.get(url)
     assert response.status_code == status.HTTP_200_OK
-    assert str(note_for_b.id) in response.json()["id"]
+    assert str(appt_for_b.id) in response.json()["id"]
 
 
 @pytest.mark.django_db()
-def test_unauthenticated_cannot_access_note(note_for_b):
+def test_unauthenticated_cannot_access_note(appt_for_b):
     """Unauthenticated request returns 401."""
     client = APIClient()
-    url = f"/clinical/notes/{note_for_b.id}"
+    url = f"/appointments/{appt_for_b.id}"
     response = client.get(url)
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -141,7 +165,7 @@ def test_must_reset_password_blocks_protected_endpoint(patient_a):
     patient_a.must_reset_password = True
     patient_a.save(update_fields=["must_reset_password"])
     client = _auth_client(patient_a)
-    response = client.get("/clinical/notes/00000000-0000-0000-0000-000000000000")
+    response = client.get("/appointments/me")
     assert response.status_code == status.HTTP_403_FORBIDDEN
     assert response.json()["error"]["code"] == "must_reset_password"
 

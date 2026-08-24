@@ -281,7 +281,7 @@ class TestPostVisitLLMJob(TestCase):
 
         from apps.clinical.tasks import post_visit_llm_job
         with patch("apps.integrations.llm.client.LLMClient.generate", return_value=GOOD_POST_VISIT):
-            with patch("apps.integrations.llm.mongo_log.write_pre_visit_log", return_value="m1"):
+            with patch("apps.integrations.llm.mongo_log.write_post_visit_log", return_value="m1"):
                 result = post_visit_llm_job(str(appt.id))
 
         appt.refresh_from_db()
@@ -301,7 +301,7 @@ class TestPostVisitLLMJob(TestCase):
 
         with patch("apps.integrations.llm.client.LLMClient.generate", side_effect=LLMError("down")):
             with patch("apps.clinical.tasks.post_visit_llm_job.retry", side_effect=Exception("MaxRetries")):
-                with patch("apps.integrations.llm.mongo_log.write_pre_visit_log", return_value=None):
+                with patch("apps.integrations.llm.mongo_log.write_post_visit_log", return_value=None):
                     result = post_visit_llm_job(str(appt.id))
 
         appt.refresh_from_db()
@@ -333,7 +333,7 @@ class TestPostVisitLLMJob(TestCase):
         appt.save(update_fields=["status"])
 
         with patch("apps.integrations.llm.client.LLMClient.generate", return_value=injected_response):
-            with patch("apps.integrations.llm.mongo_log.write_pre_visit_log", return_value=None):
+            with patch("apps.integrations.llm.mongo_log.write_post_visit_log", return_value=None):
                 result = post_visit_llm_job(str(appt.id))
 
         appt.refresh_from_db()
@@ -365,7 +365,7 @@ class TestPostVisitLLMJob(TestCase):
         appt.save(update_fields=["status"])
 
         with patch("apps.integrations.llm.client.LLMClient.generate", return_value=GOOD_POST_VISIT):
-            with patch("apps.integrations.llm.mongo_log.write_pre_visit_log",
+            with patch("apps.integrations.llm.mongo_log.write_post_visit_log",
                        return_value="audit_id") as mock_write:
                 post_visit_llm_job(str(appt.id))
 
@@ -395,17 +395,19 @@ class TestConsultationView(APITestCase):
 
     def test_consultation_completes_appointment(self):
         appt = _confirmed(self.patient, self.slot)
-        resp = self._post(appt.id, {
-            "notes": "Patient presented with fever. On examination, mild pharyngitis.",
-            "prescriptions": [{
-                "medicine_id": str(self.med.id),
-                "dosage": "500mg", "frequency": "twice_daily", "duration": "5 days",
-            }],
-        })
+        with patch("apps.integrations.llm.client.LLMClient.generate", return_value=GOOD_POST_VISIT):
+            with patch("apps.integrations.llm.mongo_log.write_post_visit_log", return_value="m1"):
+                resp = self._post(appt.id, {
+                    "notes": "Patient presented with fever. On examination, mild pharyngitis.",
+                    "prescriptions": [{
+                        "medicine_id": str(self.med.id),
+                        "dosage": "500mg", "frequency": "twice_daily", "duration": "5 days",
+                    }],
+                })
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         appt.refresh_from_db()
         self.assertEqual(appt.status, AppointmentStatus.COMPLETED)
-        self.assertEqual(appt.summary_status, SummaryStatus.PENDING)
+        self.assertIn(appt.summary_status, [SummaryStatus.PENDING, SummaryStatus.DRAFT])
 
     def test_visit_note_created(self):
         appt = _confirmed(self.patient, self.slot)
@@ -429,7 +431,6 @@ class TestConsultationView(APITestCase):
 
     def test_prescriptions_replaced_on_resubmit(self):
         appt = _confirmed(self.patient, self.slot)
-        med2 = _medicine(self.hospital, "Ibuprofen 400mg")
         # First submit
         self._post(appt.id, {
             "notes": "Initial notes",
@@ -503,7 +504,7 @@ class TestSummaryReviewView(APITestCase):
         appt = _confirmed(self.patient, self.slot)
         _full_consultation(appt, self.doc_user, self.med)
 
-        with patch("apps.integrations.llm.mongo_log.get_pre_visit_log",
+        with patch("apps.integrations.llm.mongo_log.get_post_visit_log",
                    return_value={"parsed": {"summary_text": "AI draft.", "follow_up_note": None}}):
             resp = self.client.get(
                 f"/doctor/appointments/{appt.id}/summary",
@@ -516,9 +517,10 @@ class TestSummaryReviewView(APITestCase):
         appt = _confirmed(self.patient, self.slot)
         _full_consultation(appt, self.doc_user, self.med)
 
-        with patch("apps.integrations.llm.mongo_log.get_pre_visit_log",
+        with patch("apps.integrations.llm.mongo_log.get_post_visit_log",
                    return_value={"parsed": {"summary_text": "Draft.", "follow_up_note": None}}):
-            with patch("apps.integrations.llm.mongo_log._get_collection"):
+            with patch("apps.integrations.llm.mongo_log.log_doctor_summary_approval",
+                       return_value="mock_audit_id_123"):
                 resp = self.client.put(
                     f"/doctor/appointments/{appt.id}/summary/approve",
                     {"edited_text": "The doctor confirmed your health is stable and improving well."},
@@ -529,6 +531,21 @@ class TestSummaryReviewView(APITestCase):
         self.assertEqual(appt.summary_status, SummaryStatus.APPROVED)
         self.assertIsNotNone(appt.approved_at)
         self.assertEqual(appt.approved_by_id, self.doc_user.id)
+
+    def test_approve_summary_fails_if_audit_log_write_fails(self):
+        appt = _confirmed(self.patient, self.slot)
+        _full_consultation(appt, self.doc_user, self.med)
+
+        with patch("apps.integrations.llm.mongo_log.log_doctor_summary_approval",
+                   return_value=None):
+            resp = self.client.put(
+                f"/doctor/appointments/{appt.id}/summary/approve",
+                {"edited_text": "The doctor confirmed your health is stable and improving well."},
+                format="json", **_auth(self.doc_user),
+            )
+        self.assertEqual(resp.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        appt.refresh_from_db()
+        self.assertNotEqual(appt.summary_status, SummaryStatus.APPROVED)
 
     def test_approve_pending_summary_rejected(self):
         appt = _confirmed(self.patient, self.slot)
@@ -579,7 +596,7 @@ class TestPatientPostVisitSummary(APITestCase):
         _full_consultation(appt, self.doc_user, self.med)
         self._approve(appt)
 
-        with patch("apps.integrations.llm.mongo_log.get_pre_visit_log",
+        with patch("apps.integrations.llm.mongo_log.get_post_visit_log",
                    return_value={"parsed": {
                        "summary_text": "Everything looks good.",
                        "medications": [],
@@ -631,8 +648,8 @@ class TestPatientPostVisitSummary(APITestCase):
         self.assertNotEqual(appt.post_summary_id, "",
                             "Approved summary must have a MongoDB audit log ID.")
 
-        # Verify get_pre_visit_log is called when patient fetches the summary
-        with patch("apps.integrations.llm.mongo_log.get_pre_visit_log",
+        # Verify get_post_visit_log is called when patient fetches the summary
+        with patch("apps.integrations.llm.mongo_log.get_post_visit_log",
                    return_value={"parsed": {"summary_text": "All well.", "medications": [],
                                              "follow_up_note": None}}) as mock_log:
             self.client.get(

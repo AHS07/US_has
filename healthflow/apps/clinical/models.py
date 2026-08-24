@@ -197,6 +197,7 @@ class Appointment(models.Model):
         db_column="original_request_id",
     )
     reassignment_note = models.TextField(blank=True, default="")  # Phase 7: shown to patient
+    google_calendar_event_id = models.CharField(max_length=255, blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -287,9 +288,10 @@ class Prescription(models.Model):
     dosage       = models.CharField(max_length=100)
     frequency    = models.CharField(max_length=20, choices=FREQUENCY_CHOICES)
     duration     = models.CharField(max_length=50)
-    instructions = models.TextField(blank=True, default="")
-    sort_order   = models.PositiveSmallIntegerField(default=0)
-    created_at   = models.DateTimeField(auto_now_add=True)
+    instructions   = models.TextField(blank=True, default="")
+    reminder_times = models.JSONField(default=list, blank=True)
+    sort_order     = models.PositiveSmallIntegerField(default=0)
+    created_at     = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = "prescriptions"
@@ -297,6 +299,24 @@ class Prescription(models.Model):
         indexes  = [
             models.Index(fields=["appointment"], name="idx_rx_appointment"),
         ]
+
+    def get_reminder_slots(self) -> list[str]:
+        """
+        Return the daily reminder slot identifiers for this prescription.
+        If doctor configured specific reminder_times, use them;
+        otherwise default to standard medical schedule for the frequency.
+        """
+        if self.reminder_times and isinstance(self.reminder_times, list) and len(self.reminder_times) > 0:
+            return [str(t) for t in self.reminder_times]
+        defaults = {
+            "once_daily":        ["morning"],
+            "twice_daily":       ["morning", "evening"],
+            "three_times_daily": ["morning", "afternoon", "evening"],
+            "four_times_daily":  ["morning", "afternoon", "evening", "bedtime"],
+            "at_bedtime":        ["bedtime"],
+            "as_needed":         [],
+        }
+        return defaults.get(self.frequency, ["morning"])
 
     def __str__(self) -> str:
         return f"Rx({self.medicine.name} for appt={self.appointment_id})"

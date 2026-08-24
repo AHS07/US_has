@@ -244,7 +244,7 @@ def post_visit_llm_job(self, appointment_id: str) -> dict:
     from apps.clinical.models import Appointment, Prescription, SummaryStatus
     from apps.integrations.llm.client import LLMError, LLMMalformedError, get_client
     from apps.integrations.llm.prompts import build_post_visit_prompt
-    from apps.integrations.llm.mongo_log import write_pre_visit_log  # reused for post-visit
+    from apps.integrations.llm.mongo_log import write_post_visit_log
 
     # ── Load appointment ─────────────────────────────────────────────────────
     try:
@@ -318,14 +318,11 @@ def post_visit_llm_job(self, appointment_id: str) -> dict:
     # ── Audit log ────────────────────────────────────────────────────────────
     mongo_id = None
     try:
-        mongo_id = write_pre_visit_log(
+        mongo_id = write_post_visit_log(
             appointment_id   = appointment_id,
             prompt           = prompt,
             raw_response     = raw_text,
             parsed           = parsed,
-            urgency_rule     = "",
-            urgency_override = False,
-            final_urgency    = None,
             status           = llm_status,
             error_detail     = error_detail,
             duration_ms      = duration_ms,

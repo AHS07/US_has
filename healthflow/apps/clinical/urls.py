@@ -37,6 +37,7 @@ from apps.clinical.views import (
     AppointmentDetailView,
     AppointmentListView,
     AttachmentDeleteView,
+    AttachmentDownloadView,
     AttachmentListCreateView,
     CancelHoldView,
     CancelView,
@@ -72,6 +73,8 @@ urlpatterns = [
          AttachmentListCreateView.as_view(), name="attachment-list-create"),
     path("appointments/<uuid:appointment_id>/attachments/<uuid:attachment_id>",
          AttachmentDeleteView.as_view(),     name="attachment-delete"),
+    path("appointments/attachments/<uuid:attachment_id>/download",
+         AttachmentDownloadView.as_view(),   name="attachment-download"),
 
     # ── Doctor-facing (Phase 3/5) ─────────────────────────────────────────────
     path("doctor/appointments/<uuid:appointment_id>",

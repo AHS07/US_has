@@ -690,6 +690,54 @@ class AttachmentDeleteView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class AttachmentDownloadView(APIView):
+    """
+    GET /appointments/attachments/:id/download
+
+    Secure, authorization-checked attachment file download.
+    Only the patient who owns the appointment, the doctor assigned to the appointment,
+    or a hospital admin within the same hospital can download the file.
+    """
+    permission_classes = [IsAuthenticated, IsNotForcedReset]
+
+    def get(self, request: Request, attachment_id: str):
+        from django.http import FileResponse
+
+        try:
+            attachment = (
+                PreVisitAttachment.objects
+                .select_related("appointment__patient", "appointment__doctor", "appointment__hospital")
+                .get(id=attachment_id)
+            )
+        except (PreVisitAttachment.DoesNotExist, Exception):
+            raise NotFound("Attachment not found.")
+
+        appt = attachment.appointment
+        user = request.user
+
+        # Access check: patient owner, assigned doctor, or hospital admin
+        allowed = False
+        if user.role == UserRole.PATIENT and appt.patient_id == user.id:
+            allowed = True
+        elif user.role == UserRole.DOCTOR and appt.doctor_id == user.id:
+            allowed = True
+        elif user.role == UserRole.ADMIN and appt.hospital_id == user.hospital_id:
+            allowed = True
+
+        if not allowed:
+            raise NotFound("Attachment not found.")
+
+        if not attachment.file:
+            raise NotFound("Attachment file missing.")
+
+        return FileResponse(
+            attachment.file.open("rb"),
+            content_type=attachment.file_type or "application/octet-stream",
+            as_attachment=False,
+            filename=attachment.original_filename or "attachment",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Phase 5 — Consultation, summary, medicine catalog views
 # ---------------------------------------------------------------------------
@@ -763,13 +811,14 @@ class ConsultationView(APIView):
             for i, row in enumerate(d["prescriptions"]):
                 med = MedicineCatalog.objects.get(id=row["medicine_id"])
                 Prescription.objects.create(
-                    appointment  = appointment,
-                    medicine     = med,
-                    dosage       = row["dosage"],
-                    frequency    = row["frequency"],
-                    duration     = row["duration"],
-                    instructions = row.get("instructions", ""),
-                    sort_order   = row.get("sort_order", i),
+                    appointment    = appointment,
+                    medicine       = med,
+                    dosage         = row["dosage"],
+                    frequency      = row["frequency"],
+                    duration       = row["duration"],
+                    instructions   = row.get("instructions", ""),
+                    reminder_times = row.get("reminder_times", []),
+                    sort_order     = row.get("sort_order", i),
                 )
 
             # ── Complete transition ──────────────────────────────────────────
@@ -832,8 +881,8 @@ class SummaryReviewView(APIView):
         summary_text = ""
         follow_up_note = None
         if appointment.summary_status == SummaryStatus.DRAFT and appointment.post_summary_id:
-            from apps.integrations.llm.mongo_log import get_pre_visit_log
-            doc = get_pre_visit_log(str(appointment.id))
+            from apps.integrations.llm.mongo_log import get_post_visit_log
+            doc = get_post_visit_log(str(appointment.id))
             if doc and doc.get("parsed"):
                 summary_text   = doc["parsed"].get("summary_text", "")
                 follow_up_note = doc["parsed"].get("follow_up_note")
@@ -862,18 +911,19 @@ class SummaryReviewView(APIView):
         serializer.is_valid(raise_exception=True)
         edited_text = serializer.validated_data["edited_text"]
 
-        # Write edited text back to MongoDB audit log
-        if appointment.post_summary_id:
-            try:
-                from apps.integrations.llm.mongo_log import _get_collection
-                _get_collection().update_one(
-                    {"appointment_id": str(appointment.id), "call_type": "pre_visit",
-                     "status": "ok"},
-                    {"$set": {"parsed.summary_text": edited_text, "edited_by_doctor": True}},
-                    upsert=False,
-                )
-            except Exception as exc:
-                logger.warning("MongoDB update failed for %s: %s", appointment.id, exc)
+        # Write immutable doctor approval audit log to MongoDB — MUST succeed before marking approved
+        from apps.integrations.llm.mongo_log import log_doctor_summary_approval
+        audit_id = log_doctor_summary_approval(
+            appointment_id=str(appointment.id),
+            summary_text=edited_text,
+            doctor_id=str(request.user.id),
+        )
+        if not audit_id:
+            logger.error("Failed to write doctor approval audit record for appointment %s", appointment.id)
+            return Response(
+                {"error": {"code": "audit_write_failed", "message": "Failed to record approval audit event."}},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         mark_summary_approved(appointment, approved_by=request.user)
 
@@ -913,8 +963,8 @@ class PatientPostVisitSummaryView(ScopedQuerysetMixin, APIView):
         summary_text   = ""
         follow_up_note = None
         if appointment.post_summary_id:
-            from apps.integrations.llm.mongo_log import get_pre_visit_log
-            doc = get_pre_visit_log(str(appointment.id))
+            from apps.integrations.llm.mongo_log import get_post_visit_log
+            doc = get_post_visit_log(str(appointment.id))
             if doc and doc.get("parsed"):
                 summary_text   = doc["parsed"].get("summary_text", "")
                 follow_up_note = doc["parsed"].get("follow_up_note")

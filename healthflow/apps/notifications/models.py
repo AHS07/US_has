@@ -32,6 +32,7 @@ class NotificationEventType(models.TextChoices):
     RUNNING_LATE            = "running_late",            "Doctor running late"
     FOLLOW_UP_AVAILABLE     = "follow_up_available",     "Follow-up available"
     VISIT_SUMMARY_READY     = "visit_summary_ready",     "Visit summary ready"
+    MEDICATION_REMINDER     = "medication_reminder",     "Medication reminder"
 
 
 class EmailJobStatus(models.TextChoices):
@@ -172,3 +173,41 @@ class DoctorGoogleCredentials(models.Model):
 
     def __str__(self) -> str:
         return f"GoogleCreds(doctor={self.doctor_id})"
+
+
+# ---------------------------------------------------------------------------
+# MedicationReminderLog  (Phase 8)
+# ---------------------------------------------------------------------------
+
+class MedicationReminderLog(models.Model):
+    """
+    Tracks daily medication reminder dispatches per prescription and time slot.
+    Guarantees strict idempotency for medication_reminder_dispatch.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    patient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="medication_reminders",
+        db_column="patient_id",
+    )
+    prescription = models.ForeignKey(
+        "clinical.Prescription",
+        on_delete=models.CASCADE,
+        related_name="reminder_logs",
+        db_column="prescription_id",
+    )
+    reminder_date = models.DateField(db_index=True)
+    time_slot     = models.CharField(max_length=20, blank=True, default="morning")
+    sent_at       = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "medication_reminder_logs"
+        unique_together = [("prescription", "reminder_date", "time_slot")]
+        indexes = [
+            models.Index(fields=["patient", "reminder_date"], name="idx_med_remind_patient_date"),
+        ]
+
+    def __str__(self) -> str:
+        return f"MedReminder({self.patient_id} rx={self.prescription_id} {self.reminder_date} {self.time_slot})"
