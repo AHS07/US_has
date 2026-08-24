@@ -9,6 +9,10 @@ ALLOWED_HOSTS = ["*"]
 # Use console email backend in dev — no SMTP server needed
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
+# In dev, execute Celery tasks eagerly/synchronously so tasks run without a separate worker process
+CELERY_TASK_ALWAYS_EAGER = config("CELERY_ALWAYS_EAGER", cast=bool, default=True)  # noqa: F405
+CELERY_TASK_EAGER_PROPAGATES = True
+
 # By default in dev, use PostgreSQL configured in base.py (connected via .env).
 # Fall back to SQLite only if USE_SQLITE is explicitly enabled.
 if config("USE_SQLITE", cast=bool, default=False):  # noqa: F405
