@@ -1,13 +1,14 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useLocation, Outlet } from 'react-router-dom'
 import { animate } from 'animejs'
+import { useAuth } from '@/context/AuthContext'
 
 const NAV_ITEMS = [
   {
     path: '/patient/search',
     label: 'Find Doctor',
     icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
         <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" strokeLinecap="round" />
       </svg>
     ),
@@ -16,7 +17,7 @@ const NAV_ITEMS = [
     path: '/patient/appointments',
     label: 'Appointments',
     icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
         <rect x="3" y="4" width="18" height="18" rx="2" />
         <path d="M16 2v4M8 2v4M3 10h18" strokeLinecap="round" />
       </svg>
@@ -26,7 +27,7 @@ const NAV_ITEMS = [
     path: '/patient/notifications',
     label: 'Alerts',
     icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
@@ -35,97 +36,126 @@ const NAV_ITEMS = [
     path: '/patient/profile',
     label: 'Profile',
     icon: (
-      <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
         <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" strokeLinecap="round" />
       </svg>
     ),
   },
 ] as const
 
-// Paths that get a bottom nav
-const NAV_PATHS = ['/patient/search', '/patient/appointments', '/patient/notifications', '/patient/profile']
+const ROOT_PATHS = ['/patient/search', '/patient/appointments', '/patient/notifications', '/patient/profile']
 
 export default function PatientLayout() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { logout } = useAuth()
   const mainRef = useRef<HTMLDivElement>(null)
+  const isLogin = location.pathname === '/patient/login'
 
-  const showNav = NAV_PATHS.some(p => location.pathname.startsWith(p))
-  const showBack = !showNav && location.pathname !== '/patient/login'
+  const isRoot = ROOT_PATHS.includes(location.pathname)
 
   useEffect(() => {
-    if (!mainRef.current) return
-    animate(mainRef.current, { opacity: [0, 1], translateY: [12, 0], duration: 380, easing: 'easeOutCubic' })
-  }, [location.pathname])
+    if (!mainRef.current || isLogin) return
+    animate(mainRef.current, { opacity: [0, 1], translateY: [8, 0], duration: 320, easing: 'easeOutCubic' })
+  }, [location.pathname, isLogin])
+
+  async function handleLogout() {
+    await logout()
+    navigate('/patient/login')
+  }
+
+  if (isLogin) return <div className="min-h-screen bg-[#F7F6F3]"><Outlet /></div>
+
+  const currentLabel = NAV_ITEMS.find(n => location.pathname.startsWith(n.path))?.label ?? 'Patient Portal'
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F2EFE2] max-w-md mx-auto relative">
-      {/* Header — hidden on login */}
-      {location.pathname !== '/patient/login' && (
-        <header className="sticky top-0 z-20 bg-[#F2EFE2]/90 backdrop-blur-md border-b border-[#D8D2C4] px-4">
-          <div className="flex items-center gap-3 h-14">
-            {showBack ? (
+    <div className="min-h-screen bg-[#F7F6F3] flex">
+      {/* Sidebar */}
+      <aside className="w-56 bg-white border-r border-[#E8E4DA] flex flex-col shrink-0">
+        <div className="px-5 py-6 border-b border-[#E8E4DA]">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-[#98AA9D] flex items-center justify-center">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 4v16M4 12h16" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+            </div>
+            <span className="text-[#2D3536] font-semibold text-sm">HealthFlow</span>
+          </div>
+          <div className="mt-4 flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-[#EEF3EF] flex items-center justify-center text-[#697C70] text-sm font-semibold shrink-0" aria-hidden="true">
+              P
+            </div>
+            <div>
+              <p className="text-[#2D3536] text-xs font-semibold">Patient</p>
+              <p className="text-[#697C70] text-[11px]">Portal</p>
+            </div>
+          </div>
+        </div>
+
+        <nav className="flex-1 px-3 py-4" aria-label="Patient navigation">
+          <p className="text-[10px] text-[#A0A09A] uppercase tracking-wider px-3 mb-2 font-medium">Menu</p>
+          {NAV_ITEMS.map(item => {
+            const active = location.pathname.startsWith(item.path)
+            return (
               <button
+                key={item.path}
                 type="button"
-                onClick={() => navigate(-1)}
-                className="p-1.5 -ml-1.5 rounded-lg text-[#697C70] hover:text-[#2D3536] hover:bg-[#E8E4DA] transition-colors"
-                aria-label="Go back"
+                onClick={() => navigate(item.path)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all mb-1 ${
+                  active
+                    ? 'bg-[#EEF3EF] text-[#2D3536] font-semibold border-l-2 border-[#98AA9D]'
+                    : 'text-[#697C70] hover:text-[#2D3536] hover:bg-[#EEF3EF]'
+                }`}
+                aria-current={active ? 'page' : undefined}
               >
-                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <span className={active ? 'text-[#98AA9D]' : 'text-[#697C70]'}>{item.icon}</span>
+                {item.label}
               </button>
-            ) : (
-              <span className="text-[#98AA9D]" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2C7 2 3 6 3 12s4 10 9 10 9-4.5 9-10S17 2 12 2z" fill="#98AA9D" opacity=".3" />
-                  <path d="M12 7v5l3 3" stroke="#98AA9D" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </span>
-            )}
-            <h1 className="text-base font-semibold text-[#2D3536] flex-1 truncate">
-              HealthFlow
-            </h1>
+            )
+          })}
+        </nav>
+
+        <div className="px-3 py-4 border-t border-[#E8E4DA]">
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#697C70] hover:text-[#8B1A1A] hover:bg-[#F5D0CC]/30 transition-colors"
+          >
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" />
+            </svg>
+            Sign out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="bg-white border-b border-[#E8E4DA] px-6 h-14 flex items-center gap-3">
+          {!isRoot && (
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="p-1.5 -ml-1.5 rounded-lg text-[#697C70] hover:text-[#2D3536] hover:bg-[#EEF3EF] transition-colors"
+              aria-label="Go back"
+            >
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
+          <h1 className="text-[#2D3536] font-semibold text-sm flex-1">
+            {currentLabel}
+          </h1>
+          <div className="flex items-center gap-2 text-[#697C70] text-xs">
+            <span className="w-2 h-2 rounded-full bg-[#98AA9D]" aria-hidden="true" />
+            HealthFlow Patient
           </div>
         </header>
-      )}
-
-      {/* Content */}
-      <main ref={mainRef} className={`flex-1 overflow-y-auto ${showNav ? 'pb-24' : ''}`} style={{ opacity: 0 }}>
-        <Outlet />
-      </main>
-
-      {/* Bottom nav */}
-      {showNav && (
-        <nav
-          className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md z-20 bg-[#F2EFE2]/95 backdrop-blur border-t border-[#D8D2C4]"
-          aria-label="Patient navigation"
-        >
-          <ul className="flex">
-            {NAV_ITEMS.map(item => {
-              const active = location.pathname.startsWith(item.path)
-              return (
-                <li key={item.path} className="flex-1">
-                  <button
-                    type="button"
-                    onClick={() => navigate(item.path)}
-                    className={`relative w-full flex flex-col items-center gap-1 py-3 text-[10px] font-medium transition-colors ${
-                      active ? 'text-[#98AA9D]' : 'text-[#A0A09A] hover:text-[#697C70]'
-                    }`}
-                    aria-current={active ? 'page' : undefined}
-                  >
-                    <span className={active ? 'text-[#98AA9D]' : ''} aria-hidden="true">{item.icon}</span>
-                    {item.label}
-                    {active && (
-                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-5 h-0.5 bg-[#98AA9D] rounded-full" aria-hidden="true" />
-                    )}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
-      )}
+        <main ref={mainRef} className="flex-1 overflow-y-auto p-6 max-w-5xl w-full mx-auto" style={{ opacity: 0 }}>
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

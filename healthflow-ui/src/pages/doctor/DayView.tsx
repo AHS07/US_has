@@ -55,12 +55,12 @@ function PatientRow({
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-[#323D3E] transition-colors"
+      className="w-full text-left flex items-center gap-3 px-4 py-3 hover:bg-[#EEF3EF] transition-colors"
       aria-label={`Patient ${patient.name}, token ${patient.token}, urgency ${patient.urgency}`}
     >
       {/* Token badge */}
       <div
-        className="w-8 h-8 rounded-full bg-[#3A4546] flex items-center justify-center text-[#B3C9D6] text-sm font-bold shrink-0 font-mono"
+        className="w-8 h-8 rounded-full bg-[#EEF3EF] flex items-center justify-center text-[#2D3536] text-sm font-bold shrink-0 font-mono border border-[#E8E4DA]"
         aria-hidden="true"
       >
         {patient.token}
@@ -69,7 +69,7 @@ function PatientRow({
       {/* Name + complaint */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
-          <span className="text-white text-sm font-medium truncate">{patient.name}</span>
+          <span className="text-[#2D3536] text-sm font-semibold truncate">{patient.name}</span>
           <span className="text-[#697C70] text-xs shrink-0">{patient.age}y</span>
         </div>
         <p className="text-[#697C70] text-xs truncate">{patient.chief_complaint}</p>
@@ -112,34 +112,34 @@ function SlotRow({
   const isFull          = slot.booked_count >= slot.capacity && !slot.unavailable
 
   const borderClass = slot.unavailable
-    ? 'border-[#3A4546] opacity-60'
+    ? 'border-[#E8E4DA] opacity-60'
     : expanded
-    ? 'border-[#98AA9D]/40'
-    : 'border-[#3A4546] hover:border-[#4A5556]'
+    ? 'border-[#98AA9D] shadow-sm'
+    : 'border-[#E8E4DA] hover:border-[#98AA9D]/50 shadow-sm'
 
   const bgClass = slot.unavailable
-    ? 'bg-[#2A3334]'
+    ? 'bg-[#FAF9F5]'
     : expanded
-    ? 'bg-[#2D3A3B]'
-    : 'bg-[#323D3E]'
+    ? 'bg-[#FAF9F5]'
+    : 'bg-white'
 
   return (
-    <div className={`rounded-xl border overflow-hidden transition-all ${bgClass} ${borderClass}`}>
+    <div className={`rounded-2xl border overflow-hidden transition-all ${bgClass} ${borderClass}`}>
       <button
         type="button"
         onClick={onToggle}
         disabled={slot.unavailable}
-        className="w-full flex items-center px-4 py-3 gap-3 text-left"
+        className="w-full flex items-center px-4 py-3.5 gap-3 text-left"
         aria-expanded={expanded}
         aria-label={`Slot ${formatTime(slot.slot_start)}–${formatTime(slot.slot_end)}, ${patientCount} patients`}
       >
         {/* Time */}
-        <span className="text-sm font-mono font-medium text-[#B3C9D6] w-28 shrink-0">
+        <span className="text-sm font-mono font-semibold text-[#2D3536] w-28 shrink-0">
           {formatTime(slot.slot_start)}–{formatTime(slot.slot_end)}
         </span>
 
         {/* Count / status */}
-        <span className="text-xs text-[#697C70]">
+        <span className="text-xs text-[#697C70] font-medium">
           {slot.unavailable
             ? 'Unavailable'
             : patientCount === 0
@@ -149,14 +149,14 @@ function SlotRow({
 
         {/* High urgency flag */}
         {hasHighUrgency && (
-          <span className="text-[10px] bg-[#F5D0CC] text-[#8B1A1A] px-2 py-0.5 rounded-full font-medium">
+          <span className="text-[10px] bg-[#F5D0CC] text-[#8B1A1A] px-2 py-0.5 rounded-full font-semibold">
             High urgency
           </span>
         )}
 
         {/* Full badge */}
         {isFull && !slot.unavailable && (
-          <span className="text-[10px] bg-[#3A4546] text-[#A0A09A] px-2 py-0.5 rounded-full font-medium">
+          <span className="text-[10px] bg-[#EEF3EF] text-[#697C70] px-2 py-0.5 rounded-full font-medium">
             Full
           </span>
         )}
@@ -165,12 +165,12 @@ function SlotRow({
 
         {/* Capacity pip row */}
         {!slot.unavailable && slot.capacity > 0 && (
-          <div className="hidden sm:flex gap-0.5 items-center" aria-hidden="true">
+          <div className="hidden sm:flex gap-1 items-center" aria-hidden="true">
             {Array.from({ length: Math.min(slot.capacity, 10) }).map((_, i) => (
               <span
                 key={i}
-                className={`w-1.5 h-1.5 rounded-full ${
-                  i < slot.booked_count ? 'bg-[#98AA9D]' : 'bg-[#3A4546]'
+                className={`w-2 h-2 rounded-full ${
+                  i < slot.booked_count ? 'bg-[#98AA9D]' : 'bg-[#E8E4DA]'
                 }`}
               />
             ))}
@@ -192,7 +192,7 @@ function SlotRow({
 
       {/* Expanded patient list */}
       {expanded && patientCount > 0 && (
-        <div className="border-t border-[#3A4546] divide-y divide-[#3A4546]/50">
+        <div className="border-t border-[#E8E4DA] divide-y divide-[#E8E4DA]/60 bg-white">
           {slot.patients.map(p => (
             <PatientRow key={p.id} patient={p} onClick={() => onSelectPatient(p)} />
           ))}
@@ -201,7 +201,7 @@ function SlotRow({
 
       {/* Empty expanded state */}
       {expanded && patientCount === 0 && !slot.unavailable && (
-        <div className="border-t border-[#3A4546] px-4 py-4">
+        <div className="border-t border-[#E8E4DA] px-4 py-4 bg-white">
           <p className="text-xs text-[#697C70]">No patients booked for this slot yet.</p>
         </div>
       )}
@@ -265,11 +265,11 @@ export default function DayView({ onSelectPatient }: Props) {
   )
 
   return (
-    <div className="p-6">
+    <div className="p-6 max-w-5xl mx-auto">
       {/* Date nav */}
       <div className="flex items-center justify-between mb-6 gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-white">
+          <h2 className="text-xl font-bold text-[#2D3536]">
             {dateLabel(date)}
           </h2>
           <p className="text-xs text-[#697C70] font-mono mt-0.5">{date}</p>
@@ -279,20 +279,20 @@ export default function DayView({ onSelectPatient }: Props) {
           value={date}
           onChange={e => setDate(e.target.value)}
           aria-label="Select date"
-          className="bg-[#3A4546] border border-[#4A5556] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-[#98AA9D] shrink-0"
+          className="bg-white border border-[#E8E4DA] rounded-xl px-3 py-2 text-sm text-[#2D3536] focus:outline-none focus:border-[#98AA9D] shrink-0 shadow-sm"
         />
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-4 gap-3 mb-6">
+      <div className="grid grid-cols-4 gap-4 mb-6">
         {([
           { label: 'Slots today',    value: String(slots.filter(s => !s.unavailable).length) },
           { label: 'Patients',       value: String(totalPatients) },
           { label: 'Completed',      value: String(completedSlots) },
           { label: 'Pending review', value: String(pendingReview) },
         ] as const).map(({ label, value }) => (
-          <div key={label} className="bg-[#3A4546] rounded-xl p-3.5">
-            <p className="text-2xl font-bold text-white font-mono">{value}</p>
+          <div key={label} className="bg-white border border-[#E8E4DA] rounded-2xl p-4 shadow-sm">
+            <p className="text-2xl font-bold text-[#2D3536] font-mono">{value}</p>
             <p className="text-[#697C70] text-xs mt-0.5">{label}</p>
           </div>
         ))}
@@ -300,7 +300,7 @@ export default function DayView({ onSelectPatient }: Props) {
 
       {/* Error */}
       {error && (
-        <p role="alert" className="text-sm text-[#F5D0CC] bg-[#8B1A1A]/20 rounded-xl px-4 py-3 mb-4">
+        <p role="alert" className="text-sm text-[#8B1A1A] bg-[#F5D0CC] rounded-xl px-4 py-3 mb-4 font-medium">
           {error}
         </p>
       )}
@@ -309,18 +309,18 @@ export default function DayView({ onSelectPatient }: Props) {
       {loading ? (
         <div className="space-y-2">
           {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="h-14 rounded-xl bg-[#323D3E] animate-pulse" />
+            <div key={i} className="h-14 rounded-2xl bg-white border border-[#E8E4DA] animate-pulse" />
           ))}
         </div>
       ) : slots.length === 0 ? (
-        <div className="rounded-xl border border-[#3A4546] bg-[#323D3E] px-6 py-10 text-center">
-          <p className="text-sm text-[#697C70]">No slots configured for this date.</p>
-          <p className="text-xs text-[#4A5556] mt-1">
+        <div className="rounded-2xl border border-[#E8E4DA] bg-white px-6 py-10 text-center shadow-sm">
+          <p className="text-sm text-[#697C70] font-medium">No slots configured for this date.</p>
+          <p className="text-xs text-[#A0A09A] mt-1">
             Contact your admin to set up shift hours and generate slots.
           </p>
         </div>
       ) : (
-        <div ref={gridRef} className="space-y-2">
+        <div ref={gridRef} className="space-y-3">
           {slots.map(slot => (
             <div key={slot.id} className="slot-row" style={{ opacity: 0 }}>
               <SlotRow

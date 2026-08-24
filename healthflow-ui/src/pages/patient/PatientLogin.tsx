@@ -18,15 +18,11 @@ export default function PatientLogin() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
-  const heroRef = useRef<HTMLDivElement>(null)
-  const formRef = useRef<HTMLDivElement>(null)
+  const cardRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (heroRef.current) {
-      animate(heroRef.current, { opacity: [0, 1], translateY: [-20, 0], duration: 700, easing: 'easeOutCubic' })
-    }
-    if (formRef.current) {
-      animate(formRef.current, { opacity: [0, 1], translateY: [30, 0], duration: 600, delay: 200, easing: 'easeOutCubic' })
+    if (cardRef.current) {
+      animate(cardRef.current, { opacity: [0, 1], translateY: [16, 0], duration: 450, easing: 'easeOutCubic' })
     }
   }, [screen])
 
@@ -86,67 +82,72 @@ export default function PatientLogin() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F2EFE2] flex flex-col">
-      {/* Hero */}
-      <div ref={heroRef} className="relative bg-[#2D3536] px-8 pt-16 pb-12 overflow-hidden" style={{ opacity: 0 }}>
-        <div className="absolute inset-0 opacity-10" aria-hidden="true">
-          <div className="absolute top-6 right-6 w-40 h-40 rounded-full border border-[#98AA9D]" />
-          <div className="absolute top-16 right-16 w-24 h-24 rounded-full border border-[#B3C9D6]" />
-        </div>
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-8">
-            <div className="w-8 h-8 rounded-lg bg-[#98AA9D] flex items-center justify-center">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 4v16M4 12h16" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-            </div>
-            <span className="text-white font-semibold tracking-wide text-lg">HealthFlow</span>
-          </div>
-          <h1 className="text-white text-3xl leading-tight font-serif">
-            Your clinic,<br />at your fingertips.
-          </h1>
-          <p className="text-[#98AA9D] text-sm mt-3 leading-relaxed max-w-xs">
-            Book appointments, track visits, and receive care summaries — all in one place.
-          </p>
-        </div>
-      </div>
+    <div className="min-h-screen bg-[#F7F6F3] flex items-center justify-center p-6">
+      <div ref={cardRef} className="w-full max-w-sm bg-white border border-[#E8E4DA] rounded-3xl p-8 shadow-sm" style={{ opacity: 0 }}>
+        {/* Back to Role Selection */}
+        <button
+          type="button"
+          onClick={() => navigate('/')}
+          className="inline-flex items-center gap-1.5 text-xs text-[#697C70] hover:text-[#2D3536] font-medium mb-6 transition-colors"
+        >
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Change portal
+        </button>
 
-      {/* Form area */}
-      <div ref={formRef} className="flex-1 px-6 pt-8 pb-10" style={{ opacity: 0 }}>
+        {/* Brand Header */}
+        <div className="flex items-center gap-2.5 mb-8">
+          <div className="w-9 h-9 rounded-xl bg-[#98AA9D] flex items-center justify-center shadow-sm">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 4v16M4 12h16" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-[#2D3536] font-semibold">HealthFlow</p>
+            <p className="text-[#697C70] text-xs">Patient Portal</p>
+          </div>
+        </div>
+
         {screen === 'login' && (
           <>
-            <h2 className="text-xl font-semibold text-[#2D3536] mb-6">Sign in to your account</h2>
-            {info && <p className="text-sm text-[#697C70] bg-[#EEF3EF] rounded-xl px-4 py-3 mb-4">{info}</p>}
-            {error && <p role="alert" className="text-sm text-[#8B1A1A] bg-[#F5D0CC] rounded-xl px-4 py-3 mb-4">{error}</p>}
+            <h1 className="text-2xl font-bold text-[#2D3536] mb-1 font-serif">Patient sign in</h1>
+            <p className="text-[#697C70] text-xs mb-6">Book appointments and access your medical summaries.</p>
+
+            {info && <p className="text-xs text-[#2D3536] bg-[#EEF3EF] rounded-xl px-4 py-3 mb-4 font-medium">{info}</p>}
+            {error && <p role="alert" className="text-xs text-[#8B1A1A] bg-[#F5D0CC] rounded-xl px-4 py-3 mb-4 font-medium">{error}</p>}
+
             <form onSubmit={handleLogin} className="space-y-4" noValidate>
               <div>
-                <label htmlFor="email" className="block text-xs font-medium text-[#697C70] mb-1.5 uppercase tracking-wider">
+                <label htmlFor="patient-email" className="block text-xs text-[#697C70] mb-1.5 uppercase tracking-wider font-medium">
                   Email address
                 </label>
                 <input
-                  id="email" type="email" autoComplete="email" required
+                  id="patient-email" type="email" autoComplete="email" required
                   value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full bg-white border border-[#D8D2C4] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#B8B4AC] focus:outline-none focus:border-[#98AA9D] focus:ring-2 focus:ring-[#98AA9D]/20 transition-all text-base"
+                  placeholder="patient.raj@healthflow.local"
+                  className="w-full bg-white border border-[#E8E4DA] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#A0A09A] focus:outline-none focus:border-[#98AA9D] transition-all text-sm shadow-sm"
                 />
               </div>
               <div>
-                <label htmlFor="password" className="block text-xs font-medium text-[#697C70] mb-1.5 uppercase tracking-wider">
-                  Password
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="patient-password" className="block text-xs text-[#697C70] uppercase tracking-wider font-medium">
+                    Password
+                  </label>
+                  <button type="button" onClick={() => { setError(''); setInfo(''); setScreen('forgot') }}
+                    className="text-xs text-[#697C70] hover:text-[#2D3536] transition-colors">
+                    Forgot?
+                  </button>
+                </div>
                 <input
-                  id="password" type="password" autoComplete="current-password" required
+                  id="patient-password" type="password" autoComplete="current-password" required
                   value={password} onChange={e => setPassword(e.target.value)}
                   placeholder="Enter your password"
-                  className="w-full bg-white border border-[#D8D2C4] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#B8B4AC] focus:outline-none focus:border-[#98AA9D] focus:ring-2 focus:ring-[#98AA9D]/20 transition-all text-base"
+                  className="w-full bg-white border border-[#E8E4DA] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#A0A09A] focus:outline-none focus:border-[#98AA9D] transition-all text-sm shadow-sm"
                 />
               </div>
-              <button type="button" onClick={() => { setError(''); setInfo(''); setScreen('forgot') }}
-                className="text-sm text-[#697C70] hover:text-[#98AA9D] transition-colors">
-                Forgot password?
-              </button>
               <button type="submit" disabled={loading}
-                className="w-full bg-[#2D3536] text-white rounded-xl py-3.5 font-semibold text-base hover:bg-[#3D4546] active:scale-[0.98] transition-all disabled:opacity-60 mt-2">
+                className="w-full bg-[#2D3536] text-white rounded-xl py-3.5 font-semibold text-sm hover:bg-[#3D4546] transition-colors disabled:opacity-60 mt-2 shadow-sm">
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
                     <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -165,21 +166,28 @@ export default function PatientLogin() {
 
         {screen === 'forgot' && (
           <>
-            <button onClick={() => setScreen('login')} className="flex items-center gap-2 text-[#697C70] hover:text-[#2D3536] mb-6 transition-colors text-sm">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <button onClick={() => setScreen('login')} className="flex items-center gap-1.5 text-[#697C70] hover:text-[#2D3536] mb-5 transition-colors text-xs font-semibold">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               Back to sign in
             </button>
-            <h2 className="text-xl font-semibold text-[#2D3536] mb-2">Reset your password</h2>
-            <p className="text-sm text-[#697C70] mb-6">Enter your email and we'll send a reset link.</p>
-            {error && <p role="alert" className="text-sm text-[#8B1A1A] bg-[#F5D0CC] rounded-xl px-4 py-3 mb-4">{error}</p>}
+            <h2 className="text-xl font-bold text-[#2D3536] mb-1 font-serif">Reset password</h2>
+            <p className="text-xs text-[#697C70] mb-5">Enter your email and we'll send a reset link.</p>
+            {error && <p role="alert" className="text-xs text-[#8B1A1A] bg-[#F5D0CC] rounded-xl px-4 py-3 mb-4 font-medium">{error}</p>}
             <form onSubmit={handleForgot} className="space-y-4" noValidate>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                className="w-full bg-white border border-[#D8D2C4] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#B8B4AC] focus:outline-none focus:border-[#98AA9D] focus:ring-2 focus:ring-[#98AA9D]/20 transition-all text-base" />
+              <div>
+                <label htmlFor="forgot-email" className="block text-xs text-[#697C70] mb-1.5 uppercase tracking-wider font-medium">
+                  Email address
+                </label>
+                <input
+                  id="forgot-email" type="email" required value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="patient.raj@healthflow.local"
+                  className="w-full bg-white border border-[#E8E4DA] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#A0A09A] focus:outline-none focus:border-[#98AA9D] transition-all text-sm shadow-sm"
+                />
+              </div>
               <button type="submit" disabled={loading}
-                className="w-full bg-[#98AA9D] text-white rounded-xl py-3.5 font-semibold text-base hover:bg-[#7A9080] transition-colors disabled:opacity-60">
+                className="w-full bg-[#98AA9D] text-white rounded-xl py-3.5 font-semibold text-sm hover:bg-[#85988A] transition-colors disabled:opacity-60 shadow-sm">
                 {loading ? 'Sending…' : 'Send reset link'}
               </button>
             </form>
@@ -188,19 +196,33 @@ export default function PatientLogin() {
 
         {screen === 'reset' && (
           <>
-            <h2 className="text-xl font-semibold text-[#2D3536] mb-2">Set a new password</h2>
-            <p className="text-sm text-[#697C70] mb-6">Paste the token from your reset email and choose a new password.</p>
-            {info && <p className="text-sm text-[#697C70] bg-[#EEF3EF] rounded-xl px-4 py-3 mb-4">{info}</p>}
-            {error && <p role="alert" className="text-sm text-[#8B1A1A] bg-[#F5D0CC] rounded-xl px-4 py-3 mb-4">{error}</p>}
+            <h2 className="text-xl font-bold text-[#2D3536] mb-1 font-serif">Set new password</h2>
+            <p className="text-xs text-[#697C70] mb-5">Enter the token from your email and your new password.</p>
+            {info && <p className="text-xs text-[#2D3536] bg-[#EEF3EF] rounded-xl px-4 py-3 mb-4 font-medium">{info}</p>}
+            {error && <p role="alert" className="text-xs text-[#8B1A1A] bg-[#F5D0CC] rounded-xl px-4 py-3 mb-4 font-medium">{error}</p>}
             <form onSubmit={handleReset} className="space-y-4" noValidate>
-              <input type="text" required value={resetToken} onChange={e => setResetToken(e.target.value)}
-                placeholder="Reset token from email"
-                className="w-full bg-white border border-[#D8D2C4] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#B8B4AC] focus:outline-none focus:border-[#98AA9D] focus:ring-2 focus:ring-[#98AA9D]/20 transition-all text-base" />
-              <input type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                placeholder="New password (min 8 chars)"
-                className="w-full bg-white border border-[#D8D2C4] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#B8B4AC] focus:outline-none focus:border-[#98AA9D] focus:ring-2 focus:ring-[#98AA9D]/20 transition-all text-base" />
+              <div>
+                <label htmlFor="reset-token" className="block text-xs text-[#697C70] mb-1.5 uppercase tracking-wider font-medium">
+                  Reset token
+                </label>
+                <input
+                  id="reset-token" type="text" required value={resetToken} onChange={e => setResetToken(e.target.value)}
+                  placeholder="Paste token from email"
+                  className="w-full bg-white border border-[#E8E4DA] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#A0A09A] focus:outline-none focus:border-[#98AA9D] transition-all text-sm shadow-sm"
+                />
+              </div>
+              <div>
+                <label htmlFor="reset-new-pass" className="block text-xs text-[#697C70] mb-1.5 uppercase tracking-wider font-medium">
+                  New password
+                </label>
+                <input
+                  id="reset-new-pass" type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Min 8 characters"
+                  className="w-full bg-white border border-[#E8E4DA] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#A0A09A] focus:outline-none focus:border-[#98AA9D] transition-all text-sm shadow-sm"
+                />
+              </div>
               <button type="submit" disabled={loading}
-                className="w-full bg-[#98AA9D] text-white rounded-xl py-3.5 font-semibold text-base hover:bg-[#7A9080] transition-colors disabled:opacity-60">
+                className="w-full bg-[#98AA9D] text-white rounded-xl py-3.5 font-semibold text-sm hover:bg-[#85988A] transition-colors disabled:opacity-60 shadow-sm">
                 {loading ? 'Saving…' : 'Set password & sign in'}
               </button>
             </form>

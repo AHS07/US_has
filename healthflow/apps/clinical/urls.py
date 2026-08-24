@@ -89,6 +89,7 @@ urlpatterns = [
 
     # ── Medicine catalog (Phase 5) ────────────────────────────────────────────
     path("medicine-catalog",                 MedicineCatalogSearchView.as_view(),  name="medicine-catalog-search"),
+    path("medicine-catalog/search",          MedicineCatalogSearchView.as_view(),  name="medicine-catalog-search-alias"),
     path("medicine-catalog/new",             MedicineCatalogCreateView.as_view(),  name="medicine-catalog-create"),
     path("medicine-catalog/<uuid:medicine_id>", MedicineCatalogAdminView.as_view(), name="medicine-catalog-admin"),
 ]

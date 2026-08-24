@@ -52,41 +52,43 @@ export default function DoctorLayout() {
     }
   }
 
-  if (isLogin) return <div className="min-h-screen bg-[#2D3536]"><Outlet /></div>
+  if (isLogin) return <div className="min-h-screen bg-[#F7F6F3]"><Outlet /></div>
 
   const isDayView = location.pathname === '/doctor/day-view'
 
   return (
-    <div className="min-h-screen bg-[#2D3536] flex">
+    <div className="min-h-screen bg-[#F7F6F3] flex">
       {/* Sidebar */}
-      <aside className="w-56 bg-[#242D2E] border-r border-[#3A4546] flex flex-col shrink-0">
-        <div className="px-5 py-6 border-b border-[#3A4546]">
+      <aside className="w-56 bg-white border-r border-[#E8E4DA] flex flex-col shrink-0">
+        <div className="px-5 py-6 border-b border-[#E8E4DA]">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-[#98AA9D] flex items-center justify-center">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                 <path d="M12 4v16M4 12h16" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
               </svg>
             </div>
-            <span className="text-white font-semibold text-sm">HealthFlow</span>
+            <span className="text-[#2D3536] font-semibold text-sm">HealthFlow</span>
           </div>
           <div className="mt-4 flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-[#697C70] flex items-center justify-center text-white text-sm font-semibold shrink-0" aria-hidden="true">
+            <div className="w-8 h-8 rounded-full bg-[#EEF3EF] flex items-center justify-center text-[#697C70] text-sm font-semibold shrink-0" aria-hidden="true">
               {user?.role === 'doctor' ? 'D' : '?'}
             </div>
             <div>
-              <p className="text-white text-xs font-medium">Doctor</p>
-              <p className="text-[#697C70] text-[11px]">Portal</p>
+              <p className="text-[#2D3536] text-xs font-semibold">{user?.name ?? 'Doctor'}</p>
+              <p className="text-[#697C70] text-[11px]">Doctor Portal</p>
             </div>
           </div>
         </div>
 
         <nav className="flex-1 px-3 py-4" aria-label="Doctor navigation">
-          <p className="text-[10px] text-[#697C70] uppercase tracking-wider px-3 mb-2">Today</p>
+          <p className="text-[10px] text-[#A0A09A] uppercase tracking-wider px-3 mb-2 font-medium">Today</p>
           <button
             type="button"
             onClick={() => navigate('/doctor/day-view')}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              isDayView ? 'bg-[#98AA9D]/20 text-[#98AA9D]' : 'text-[#8A9A8E] hover:text-white hover:bg-[#3A4546]'
+              isDayView
+                ? 'bg-[#EEF3EF] text-[#2D3536] font-semibold border-l-2 border-[#98AA9D]'
+                : 'text-[#697C70] hover:text-[#2D3536] hover:bg-[#EEF3EF]'
             }`}
             aria-current={isDayView ? 'page' : undefined}
           >
@@ -98,16 +100,16 @@ export default function DoctorLayout() {
           </button>
 
           {/* Google Calendar integration */}
-          <div className="mt-4 pt-4 border-t border-[#3A4546]">
-            <p className="text-[10px] text-[#697C70] uppercase tracking-wider px-3 mb-2">Integrations</p>
+          <div className="mt-4 pt-4 border-t border-[#E8E4DA]">
+            <p className="text-[10px] text-[#A0A09A] uppercase tracking-wider px-3 mb-2 font-medium">Integrations</p>
             <button
               type="button"
               onClick={handleCalendarToggle}
               disabled={calLoading}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 calStatus?.connected
-                  ? 'text-[#98AA9D] hover:text-[#C84B4B] hover:bg-[#3A4546]'
-                  : 'text-[#8A9A8E] hover:text-white hover:bg-[#3A4546]'
+                  ? 'text-[#697C70] bg-[#EEF3EF] hover:text-[#8B1A1A] hover:bg-[#F5D0CC]/40'
+                  : 'text-[#697C70] hover:text-[#2D3536] hover:bg-[#EEF3EF]'
               }`}
               aria-label={calStatus?.connected ? 'Disconnect Google Calendar' : 'Connect Google Calendar'}
             >
@@ -116,7 +118,7 @@ export default function DoctorLayout() {
                 <rect x="3" y="4" width="18" height="18" rx="2" />
                 <path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" strokeLinecap="round" />
               </svg>
-              <span className="flex-1 text-left">
+              <span className="flex-1 text-left text-xs">
                 {calLoading
                   ? 'Connecting…'
                   : calStatus?.connected
@@ -130,11 +132,11 @@ export default function DoctorLayout() {
           </div>
         </nav>
 
-        <div className="px-3 py-4 border-t border-[#3A4546]">
+        <div className="px-3 py-4 border-t border-[#E8E4DA]">
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#8A9A8E] hover:text-[#C84B4B] transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-[#697C70] hover:text-[#8B1A1A] hover:bg-[#F5D0CC]/30 transition-colors"
           >
             <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" strokeLinecap="round" />
@@ -146,17 +148,17 @@ export default function DoctorLayout() {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-[#242D2E] border-b border-[#3A4546] px-6 h-14 flex items-center gap-3">
+        <header className="bg-white border-b border-[#E8E4DA] px-6 h-14 flex items-center gap-3">
           {!isDayView && (
             <button type="button" onClick={() => navigate(-1)}
-              className="p-1.5 -ml-1.5 rounded-lg text-[#697C70] hover:text-white hover:bg-[#3A4546] transition-colors"
+              className="p-1.5 -ml-1.5 rounded-lg text-[#697C70] hover:text-[#2D3536] hover:bg-[#EEF3EF] transition-colors"
               aria-label="Go back">
               <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <path d="M19 12H5M12 5l-7 7 7 7" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           )}
-          <h1 className="text-white font-semibold text-sm flex-1">HealthFlow Doctor Portal</h1>
+          <h1 className="text-[#2D3536] font-semibold text-sm flex-1">HealthFlow Doctor Portal</h1>
           <div className="flex items-center gap-2 text-[#697C70] text-xs">
             <span className="w-2 h-2 rounded-full bg-[#98AA9D]" aria-hidden="true" />
             Today

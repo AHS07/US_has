@@ -129,7 +129,7 @@ function PrescriptionRowEditor({
   }
 
   const FieldLabel = ({ children }: { children: React.ReactNode }) => (
-    <label className="block text-[10px] text-[#697C70] uppercase tracking-wider mb-1">
+    <label className="block text-[10px] text-[#697C70] uppercase tracking-wider font-semibold mb-1">
       {children}
     </label>
   )
@@ -137,17 +137,17 @@ function PrescriptionRowEditor({
   const Input = (props: React.InputHTMLAttributes<HTMLInputElement>) => (
     <input
       {...props}
-      className="w-full bg-[#3A4546] border border-[#4A5556] rounded-lg px-3 py-2 text-white placeholder-[#697C70] focus:outline-none focus:border-[#98AA9D] transition-all text-sm"
+      className="w-full bg-white border border-[#E8E4DA] rounded-xl px-3 py-2 text-[#2D3536] placeholder-[#A0A09A] focus:outline-none focus:border-[#98AA9D] transition-all text-sm shadow-sm"
     />
   )
 
   return (
-    <div className="bg-[#2D3536] border border-[#3A4546] rounded-xl p-4 relative">
+    <div className="bg-[#FAF9F5] border border-[#E8E4DA] rounded-2xl p-4 relative">
       {showRemove && (
         <button
           type="button"
           onClick={() => onRemove(index)}
-          className="absolute top-3 right-3 text-[#697C70] hover:text-[#C84B4B] transition-colors"
+          className="absolute top-3 right-3 text-[#697C70] hover:text-[#8B1A1A] transition-colors"
           aria-label="Remove medicine"
         >
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -173,7 +173,7 @@ function PrescriptionRowEditor({
         {/* Autocomplete dropdown */}
         {showDropdown && (query.length >= 2) && (
           <div
-            className="absolute top-full left-0 right-0 mt-1 bg-[#3A4546] border border-[#4A5556] rounded-lg overflow-hidden z-20 shadow-2xl"
+            className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#E8E4DA] rounded-xl overflow-hidden z-20 shadow-xl divide-y divide-[#E8E4DA]/60"
             role="listbox"
           >
             {suggestions.slice(0, 6).map(item => (
@@ -183,11 +183,11 @@ function PrescriptionRowEditor({
                 role="option"
                 aria-selected={row.medicine_id === item.id}
                 onClick={() => pickSuggestion(item)}
-                className="w-full text-left flex items-center justify-between px-3 py-2.5 hover:bg-[#4A5556] transition-colors"
+                className="w-full text-left flex items-center justify-between px-3.5 py-2.5 hover:bg-[#EEF3EF] transition-colors"
               >
-                <span className="text-sm text-white">{item.name}</span>
+                <span className="text-sm text-[#2D3536] font-medium">{item.name}</span>
                 {item.status === 'pending_review' && (
-                  <span className="text-[10px] bg-[#FDE8C0] text-[#7A4A00] px-1.5 py-0.5 rounded ml-2 shrink-0">
+                  <span className="text-[10px] bg-[#FDE8C0] text-[#7A4A00] px-2 py-0.5 rounded-full ml-2 shrink-0 font-medium">
                     Pending review
                   </span>
                 )}
@@ -197,7 +197,7 @@ function PrescriptionRowEditor({
               type="button"
               onClick={handleAddNew}
               disabled={creating}
-              className="w-full text-left flex items-center gap-2 px-3 py-2.5 hover:bg-[#4A5556] text-[#98AA9D] text-sm transition-colors border-t border-[#4A5556]"
+              className="w-full text-left flex items-center gap-2 px-3.5 py-2.5 hover:bg-[#EEF3EF] text-[#697C70] hover:text-[#2D3536] text-sm transition-colors font-medium"
             >
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                 <path d="M12 5v14M5 12h14" strokeLinecap="round" />
@@ -209,12 +209,12 @@ function PrescriptionRowEditor({
 
         {/* Fuzzy hint */}
         {fuzzyHint && (
-          <p className="text-[11px] text-[#E8A838] mt-1">
+          <p className="text-[11px] text-[#7A4A00] mt-1 font-medium">
             Did you mean{' '}
             <button
               type="button"
               onClick={() => handleQueryChange(fuzzyHint)}
-              className="underline"
+              className="underline font-bold"
             >
               {fuzzyHint}
             </button>?
@@ -238,7 +238,7 @@ function PrescriptionRowEditor({
           <select
             value={row.frequency}
             onChange={e => onChange(index, 'frequency', e.target.value)}
-            className="w-full bg-[#3A4546] border border-[#4A5556] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#98AA9D] text-sm"
+            className="w-full bg-white border border-[#E8E4DA] rounded-xl px-3 py-2 text-[#2D3536] focus:outline-none focus:border-[#98AA9D] text-sm shadow-sm"
           >
             <option value="">Select</option>
             {FREQUENCY_OPTIONS.map(f => (
@@ -251,7 +251,7 @@ function PrescriptionRowEditor({
           <select
             value={row.duration}
             onChange={e => onChange(index, 'duration', e.target.value)}
-            className="w-full bg-[#3A4546] border border-[#4A5556] rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#98AA9D] text-sm"
+            className="w-full bg-white border border-[#E8E4DA] rounded-xl px-3 py-2 text-[#2D3536] focus:outline-none focus:border-[#98AA9D] text-sm shadow-sm"
           >
             <option value="">Select</option>
             {DURATION_OPTIONS.map(d => (
@@ -340,11 +340,11 @@ export default function ConsultationScreen() {
   }
 
   return (
-    <div className="p-6 max-w-3xl space-y-5">
+    <div className="p-6 max-w-3xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white border border-[#E8E4DA] rounded-2xl p-5 shadow-sm">
         <div>
-          <h2 className="text-xl text-white font-semibold">
+          <h2 className="text-xl text-[#2D3536] font-bold">
             {appt?.patient_name ?? 'Consultation'}
           </h2>
           <p className="text-[#697C70] text-sm mt-0.5">
@@ -354,22 +354,22 @@ export default function ConsultationScreen() {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="text-xs text-[#697C70] hover:text-white transition-colors"
+          className="text-xs font-semibold text-[#697C70] hover:text-[#2D3536] px-3 py-1.5 rounded-xl hover:bg-[#EEF3EF] transition-colors"
         >
           ← Back
         </button>
       </div>
 
       {error && (
-        <p role="alert" className="text-sm text-[#F5D0CC] bg-[#8B1A1A]/20 rounded-xl px-4 py-3">
+        <p role="alert" className="text-sm text-[#8B1A1A] bg-[#F5D0CC] rounded-xl px-4 py-3 font-medium">
           {error}
         </p>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+      <form onSubmit={handleSubmit} className="space-y-6" noValidate>
         {/* Notes */}
-        <div className="bg-[#323D3E] border border-[#4A5556] rounded-2xl p-5">
-          <label htmlFor="notes" className="block text-xs text-[#697C70] uppercase tracking-wider mb-2">
+        <div className="bg-white border border-[#E8E4DA] rounded-2xl p-5 shadow-sm">
+          <label htmlFor="notes" className="block text-xs text-[#697C70] uppercase tracking-wider font-semibold mb-2">
             Consultation notes
           </label>
           <textarea
@@ -381,7 +381,7 @@ export default function ConsultationScreen() {
             minLength={10}
             required
             aria-describedby="notes-hint"
-            className="w-full bg-[#2D3536] border border-[#4A5556] rounded-xl px-4 py-3 text-white placeholder-[#697C70] focus:outline-none focus:border-[#98AA9D] transition-all text-sm resize-none leading-relaxed"
+            className="w-full bg-white border border-[#E8E4DA] rounded-xl px-4 py-3 text-[#2D3536] placeholder-[#A0A09A] focus:outline-none focus:border-[#98AA9D] transition-all text-sm resize-none leading-relaxed shadow-sm"
           />
           <p id="notes-hint" className="text-[10px] text-[#697C70] mt-1 text-right">
             {notes.trim().length} chars{notes.trim().length < 10 && notes.length > 0 ? ' — minimum 10' : ''}
@@ -389,13 +389,13 @@ export default function ConsultationScreen() {
         </div>
 
         {/* Prescriptions */}
-        <div className="bg-[#323D3E] border border-[#4A5556] rounded-2xl p-5">
+        <div className="bg-white border border-[#E8E4DA] rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <p className="text-sm font-semibold text-white">Prescription</p>
+            <p className="text-sm font-bold text-[#2D3536]">Prescription</p>
             <button
               type="button"
               onClick={addMed}
-              className="text-xs text-[#98AA9D] hover:text-[#B3C9D6] font-medium transition-colors flex items-center gap-1"
+              className="text-xs text-[#697C70] hover:text-[#2D3536] font-semibold bg-[#EEF3EF] px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5"
             >
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
                 <path d="M12 5v14M5 12h14" strokeLinecap="round" />
@@ -418,8 +418,8 @@ export default function ConsultationScreen() {
         </div>
 
         {/* Follow-up */}
-        <div className="bg-[#323D3E] border border-[#4A5556] rounded-2xl p-5">
-          <label htmlFor="followup" className="block text-xs text-[#697C70] uppercase tracking-wider mb-2">
+        <div className="bg-white border border-[#E8E4DA] rounded-2xl p-5 shadow-sm">
+          <label htmlFor="followup" className="block text-xs text-[#697C70] uppercase tracking-wider font-semibold mb-2">
             Follow up in (days) — optional
           </label>
           <input
@@ -430,14 +430,14 @@ export default function ConsultationScreen() {
             value={followUp}
             onChange={e => setFollowUp(e.target.value)}
             placeholder="e.g. 7"
-            className="w-32 bg-[#2D3536] border border-[#4A5556] rounded-xl px-4 py-2.5 text-white placeholder-[#697C70] focus:outline-none focus:border-[#98AA9D] text-sm"
+            className="w-36 bg-white border border-[#E8E4DA] rounded-xl px-4 py-2.5 text-[#2D3536] placeholder-[#A0A09A] focus:outline-none focus:border-[#98AA9D] text-sm shadow-sm"
           />
         </div>
 
         <button
           type="submit"
           disabled={!canSubmit}
-          className="w-full bg-[#98AA9D] text-white rounded-xl py-4 font-semibold text-sm hover:bg-[#7A9080] transition-colors disabled:opacity-40"
+          className="w-full bg-[#98AA9D] text-white rounded-2xl py-4 font-semibold text-sm hover:bg-[#85988A] transition-colors disabled:opacity-40 shadow-sm"
         >
           {submitting ? 'Completing visit…' : 'Mark visit complete & generate summary'}
         </button>
